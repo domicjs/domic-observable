@@ -1,0 +1,15 @@
+{
+  "name": "domic-observable",
+  "version": "1.0.0-beta1",
+  "repository": "https://github.com/domicjs/domic-observable",
+  "description": "Observables, domic style.",
+  "license": "MIT",
+  "typings": "./index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build",
+    "watch": "tsc -w"
+  },
+  "devDependencies": {
+  }
+}
