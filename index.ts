@@ -125,6 +125,7 @@ export class Observable<T> {
   get<U>(p: Extractor<T, U>): U;
   get(): T;
   get<K extends keyof T>(p: K): T[K];
+  get<U>(this: Observable<U[]>, p: number): U
 
   get(p?: any) : any {
     if (p == null || p === '') return this._value
@@ -192,8 +193,9 @@ export class Observable<T> {
    */
   prop<U>(extractor: Extractor<T, U>): PropObservable<T, U>
   prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
+  prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
 
-  prop<U>(prop : keyof T|Extractor<T, U>) : PropObservable<T, U> {
+  prop<U>(prop : keyof T|Extractor<T, U>|number) : PropObservable<any, U> {
     // we cheat here.
     return new PropObservable<T, U>(this, _getprop(prop) as any)
   }
@@ -203,8 +205,9 @@ export class Observable<T> {
    */
   p<U>(extractor: Extractor<T, U>): PropObservable<T, U>;
   p<K extends keyof T>(prop: K): PropObservable<T, T[K]>
+  p<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
 
-  p<U>(prop: keyof T|Extractor<T, U>): PropObservable<T, U> {
+  p<U>(prop: keyof T|Extractor<T, U>|number): PropObservable<any, U> {
     return this.prop(prop as any)
   }
 
@@ -437,11 +440,11 @@ export class Observable<T> {
  */
 export class PropObservable<T, U> extends Observable<U> {
 
-  protected _prop : keyof T
+  protected _prop : keyof T | number
   protected _obs : Observable<T>
   protected _unregister: () => void
 
-  constructor(obs : Observable<T>, prop : keyof T) {
+  constructor(obs : Observable<T>, prop : (keyof T|number)) {
     super(undefined)
     this._prop = prop // force prop as a string
     this._obs = obs
@@ -483,15 +486,17 @@ export class PropObservable<T, U> extends Observable<U> {
   prop<K extends keyof U>(p: K): PropObservable<U, U[K]>
   // prop<V>(prop: string): Observable<V>;
   prop<V>(extractor: Extractor<U, V>): PropObservable<U, V>;
+  prop<V>(this: Observable<V[]>, prop: number): PropObservable<V[], V>
+
   // prop<V>(this: Observable<V[]>, prop: number): PropObservable<U, V>;
-  prop<V>(prop : keyof T|Extractor<U, V>) : PropObservable<U, V> {
+  prop<V>(prop : keyof T|Extractor<U, V>|number) : PropObservable<any, V> {
     return new PropObservable<any, V>(this._obs, pathjoin(this._prop, _getprop(prop)) as any)
   }
 
 
   protected _refresh(prop: string = '') {
     const old_val = this._value
-    const new_val = this._value = this._obs.get(this._prop)
+    const new_val = this._value = this._obs.get(this._prop as any)
 
     for (let ob of this._observers)
       ob(new_val, prop, old_val)
@@ -506,11 +511,11 @@ export class PropObservable<T, U> extends Observable<U> {
   }
 
   next<T>(this: PropObservable<T[], T>): PropObservable<T[], T> {
-    return new PropObservable<T[], T>(this._obs, parseInt(this._prop as string) + 1)
+    return new PropObservable<T[], T>(this._obs, parseInt(this._prop as any) + 1)
   }
 
   prev<T>(this: PropObservable<T[], T>): PropObservable<T[], T> {
-    return new PropObservable<T[], T>(this._obs, parseInt(this._prop as string) - 1)
+    return new PropObservable<T[], T>(this._obs, parseInt(this._prop as any) - 1)
   }
 
   getProp() {
@@ -520,7 +525,7 @@ export class PropObservable<T, U> extends Observable<U> {
   /**
    * Change the property being watched
    */
-  setProp(p: keyof T) {
+  setProp(p: keyof T|number) {
     this._prop = p
 
     // If we're being observed, notify the change.
