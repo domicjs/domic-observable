@@ -145,19 +145,19 @@ export class Observable<T> {
     if (arguments.length > 1) {
       prop = _getprop(prop)
       changed = pathset(this._value, prop, value)
-      if (changed) this._change(prop, old_value)
+      if (changed) this.notify(prop, old_value)
     } else {
       value = prop
       changed = this._value !== value
       this._value = value
       if (changed) {
-        this._change('', old_value)
+        this.notify('', old_value)
       }
     }
     return changed
   }
 
-  protected _change(prop : string | number, old_value: T) : void {
+  protected notify(prop : string | number, old_value: T) : void {
     const val = this._value
     const obss = this._observers
     const final_prop = (prop||'').toString()
@@ -376,45 +376,45 @@ export class Observable<T> {
 
   push<U>(this: Observable<U[]>, v: U) {
     let res = this._value.push(v)
-    this._change(this._value.length - 1, this._value)
+    this.notify(this._value.length - 1, this._value)
     return res
   }
 
   pop<U>(this: Observable<U[]>): U {
     let res = this._value.pop()
-    this._change(this._value.length, this._value)
+    this.notify(this._value.length, this._value)
     return res
   }
 
   shift<U>(this: Observable<U[]>): U {
     let res = this._value.shift()
-    this._change('', this._value)
+    this.notify('', this._value)
     return res
   }
 
   unshift<U>(this: Observable<U[]>, v: U) {
     let res = this._value.unshift(v)
-    this._change('', this._value)
+    this.notify('', this._value)
     return res
   }
 
   sort<U>(this: Observable<U[]>, fn: (a: U, b: U) => number) {
     // FIXME sort function type
     let res = this._value.sort(fn)
-    this._change('', this._value)
+    this.notify('', this._value)
     return res
   }
 
   splice<U>(this: Observable<U[]>, start: number, deleteCount: number, ...items: U[]) {
     // FIXME arguments
     let res = this._value.splice(start, deleteCount, ...items)
-    this._change('', this._value)
+    this.notify('', this._value)
     return res
   }
 
   reverse<U>(this: Observable<U[]>) {
     let res = this._value.reverse()
-    this._change('', this._value)
+    this.notify('', this._value)
     return res
   }
 
@@ -498,8 +498,14 @@ export class PropObservable<T, U> extends Observable<U> {
     const old_val = this._value
     const new_val = this._value = this._obs.get(this._prop as any)
 
-    for (let ob of this._observers)
-      ob(new_val, prop, old_val)
+    // do not call the underlying properties if undefined.. ?
+    // this may be a bad idea ; we might want to know if the object is undefined
+    // or not ?
+    if (new_val === undefined) return
+
+    this.notify(prop, old_val)
+    // for (let ob of this._observers)
+    //   ob(new_val, prop, old_val)
   }
 
   oHasNext<T>(this: PropObservable<T[], T>): Observable<boolean> {
