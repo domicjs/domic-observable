@@ -613,7 +613,7 @@ export class TransformObservable<T, U> extends Observable<U> {
     const new_val = this._value = this._transformer.get(value, old_original_value, old_val)
 
     if (old_val !== new_val) {
-      for (let ob of this._observers) ob(new_val, '', old_val)
+      this.notify('', old_val)
     }
   }
 
@@ -709,12 +709,9 @@ export class DependentObservable<T> extends Observable<T> {
     const old_val = this._value
     const resolved = this._resolved || this._deps.map(dep => o.get(dep))
     const new_val = this._value = this._fn(...resolved)
-    const obs = this._observers
-    var i = 0
 
     if (old_val === new_val) return
-
-    for (i = 0; i < obs.length; i++) obs[i](new_val, '', old_val)
+    this.notify('', old_val)
   }
 
   addObserver(fn: Observer<T>) {
