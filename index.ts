@@ -7,7 +7,7 @@
  * @param  {String} path The path inside the object
  * @return {Any}  The value of the property.
  */
-export function pathget<T>(obj : any, path : string|number) : T {
+export function pathget<T>(obj : any, path : string|number) : T|undefined {
   if (path == null || path === '') return obj
   let pathes = path.toString().split('.')
   for (var i = 0; i < pathes.length; i++) {
@@ -30,6 +30,8 @@ export function pathget<T>(obj : any, path : string|number) : T {
 export function pathset(obj : any, path : string|number, value : any) : boolean {
   let pathes = (path == null ? '' : path).toString().split('.')
   let last = pathes.pop()
+  if (!last) return false
+
   for (var i = 0; i < pathes.length; i++) {
     // create objects as we need it.
     if (!obj[pathes[i]]) obj[pathes[i]] = {}
@@ -87,7 +89,7 @@ function _get_ancestry(p1: keyof any, p2: keyof any): Ancestry {
 export type O<T> = T | Observable<T>
 export type Extractor<T, U> = (a: T) => U
 
-export type Observer<T> = (obj: T, prop? : string, old_value?: T) => any
+export type Observer<T> = (obj: T, prop: string, old_value: T|undefined) => any
 
 export type TransformFn<T, U> = (a: T, old_value?: T, old_transform?: U) => U
 export type Transformer<T, U> = {
@@ -174,7 +176,7 @@ export class Observable<T> {
    */
   addObserver(fn : Observer<T>) : () => void {
     this._observers.push(fn)
-    fn(this._value, '')
+    fn(this._value, '', undefined)
     return () => this.removeObserver(fn)
   }
 
@@ -381,14 +383,14 @@ export class Observable<T> {
     return res
   }
 
-  pop<U>(this: Observable<U[]>): U {
+  pop<U>(this: Observable<U[]>): U|undefined {
     let res = this._value.pop()
     this.notify(this._value.length, this._value)
     this.notify('length', this._value)
     return res
   }
 
-  shift<U>(this: Observable<U[]>): U {
+  shift<U>(this: Observable<U[]>): U|undefined {
     let res = this._value.shift()
     this.notify('', this._value)
     return res
@@ -440,11 +442,11 @@ export class Observable<T> {
 /**
  * An Observable based on another observable, watching only its subpath.
  */
-export class PropObservable<T, U> extends Observable<U> {
+export class PropObservable<T, U> extends Observable<U | undefined> {
 
   protected _prop : keyof T | number
   protected _obs : Observable<T>
-  protected _unregister: () => void
+  protected _unregister: null | (() => void)
 
   constructor(obs : Observable<T>, prop : (keyof T|number)) {
     super(undefined)
@@ -572,7 +574,7 @@ export class PropObservable<T, U> extends Observable<U> {
 
   removeObserver(fn: Observer<U>) {
     super.removeObserver(fn)
-    if (this._observers.length === 0) {
+    if (this._observers.length === 0 && this._unregister) {
       this._unregister()
       this._unregister = null
     }
@@ -585,7 +587,7 @@ export class TransformObservable<T, U> extends Observable<U> {
 
   _transformer: Transformer<T, U>
   _obs: Observable<T>
-  _unregister: () => void
+  _unregister: (() => void)|null
 
   constructor(obs: Observable<T>, transformer: Transformer<T, U>) {
     super(undefined) // !!!
@@ -610,7 +612,7 @@ export class TransformObservable<T, U> extends Observable<U> {
     return p ? pathget(this._value, p) : this._value
   }
 
-  _refresh(value: T, old_original_value: T) {
+  _refresh(value: T, old_original_value: T|undefined) {
     const old_val = this._value
     const new_val = this._value = this._transformer.get(value, old_original_value, old_val)
 
@@ -662,7 +664,7 @@ export class TransformObservable<T, U> extends Observable<U> {
 
   removeObserver(fn: Observer<U>) {
     super.removeObserver(fn)
-    if (this._observers.length === 0) {
+    if (this._observers.length === 0 && this._unregister) {
       this._unregister()
       this._unregister = null
     }
@@ -686,7 +688,7 @@ export class DependentObservable<T> extends Observable<T> {
   constructor(deps: any[], fn: (...arg: any[]) => T) {
     super(undefined)
 
-    this._resolved = null
+    this._resolved = []
     this._unregister = []
     this._deps = deps
     this._fn = fn
@@ -697,7 +699,7 @@ export class DependentObservable<T> extends Observable<T> {
   get(): T
   get<U>(fn?: Extractor<T, U>): U
   get<K extends keyof T>(path?: K): T[K]
-  get(path?: any): T {
+  get(path?: any): any {
     if (this._observers.length === 0) this._refresh()
     return path ? pathget<T>(this._value, path) : this._value
   }
@@ -709,7 +711,7 @@ export class DependentObservable<T> extends Observable<T> {
   _refresh() {
     if (this._ignore_updates) return
     const old_val = this._value
-    const resolved = this._resolved || this._deps.map(dep => o.get(dep))
+    const resolved = this._resolved.length > 0 ? this._resolved : this._deps.map(dep => o.get(dep))
     const new_val = this._value = this._fn(...resolved)
 
     if (old_val === new_val) return
@@ -748,7 +750,7 @@ export class DependentObservable<T> extends Observable<T> {
     if (this._observers.length === 0) {
       for (let un of this._unregister) un()
       this._unregister = []
-      this._resolved = null
+      this._resolved = []
     }
   }
 
