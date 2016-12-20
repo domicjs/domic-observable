@@ -377,12 +377,14 @@ export class Observable<T> {
   push<U>(this: Observable<U[]>, v: U) {
     let res = this._value.push(v)
     this.notify(this._value.length - 1, this._value)
+    this.notify('length', this._value)
     return res
   }
 
   pop<U>(this: Observable<U[]>): U {
     let res = this._value.pop()
     this.notify(this._value.length, this._value)
+    this.notify('length', this._value)
     return res
   }
 
