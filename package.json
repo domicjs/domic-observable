@@ -4,15 +4,23 @@
   "repository": "https://github.com/domicjs/domic-observable",
   "description": "Observables, domic style.",
   "license": "MIT",
-  "typings": "./index.d.ts",
+  "typings": "./observable.d.ts",
+  "main": "./observable.js",
   "scripts": {
     "build": "tsc",
     "prepublish": "npm run build",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "test": "tscc test.ts && mocha",
+    "dev": "parallel -u ::: 'tscc -w' 'ls *.js | entr mocha -R dot '"
   },
   "dependencies": {
     "tslib": "*"
   },
   "devDependencies": {
+    "@types/chai": "^3.4.34",
+    "@types/mocha": "^2.2.39",
+    "chai": "^3.5.0",
+    "mocha": "^3.2.0",
+    "source-map-support": "^0.4.11"
   }
 }
