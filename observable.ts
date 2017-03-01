@@ -8,7 +8,7 @@ export type MaybeObservable<T> = Observable<T> | T
 /**
  * Options that determine how we are to listen to different types of updates.
  */
-export interface ObserveOptions<T> {
+export interface ObserveOptions {
 
   /**
    * Call the observer after this many milliseconds after the last update.
@@ -26,19 +26,10 @@ export interface ObserveOptions<T> {
   updatesOnly?: boolean
 
   /**
-   * Do not call the observer when the new value is undefined.
-   */
-  noUndefined?: boolean
-
-  /**
    * Do not listen to children changes
    */
   ignoreChildren?: boolean
 
-  /**
-   * Only listen to this property
-   */
-  prop?: (keyof T|number)
 }
 
 
@@ -80,6 +71,22 @@ export interface Transformer<T, U> {
 
 const BASE_OBJECT_ONLY = Symbol('base')
 const ALL_PROPERTIES = Symbol('all_props')
+
+function debounce<T extends Function>(fn: T, ms: number) {
+  var timeout: number|null = null
+  return function (this: any, ...a: any[]) {
+    var self: any = this
+    if (timeout != null) clearTimeout(timeout)
+    timeout = setTimeout(function () {
+      timeout = null
+      fn.apply(self, a)
+    }, ms)
+  }
+}
+
+function throttle<T extends Function>(func: T, wait: number) {
+  return func
+}
 
 // Several possibilities ;
 // 1. The object changed completely
@@ -324,6 +331,7 @@ export class Observable<T> {
   addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions<U>, prop?: number): UnregisterFn
   addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions<T[P]>, prop?: P): UnregisterFn
   addObserver(fn : Observer<any>, options?: ObserveOptions<any>, prop?: any) : UnregisterFn {
+    options = options || {}
     const path = (prop != null ? prop :
       options && options.ignoreChildren ? BASE_OBJECT_ONLY : ALL_PROPERTIES) as string
 
@@ -334,7 +342,15 @@ export class Observable<T> {
     this._observers_count++
     oba[path].push(fn)
 
-    if (!options || !options.updatesOnly) {
+    if (options.debounce) {
+      fn = debounce(fn, options.debounce)
+    }
+
+    if (options.throttle) {
+      fn = throttle(fn, options.throttle)
+    }
+
+    if (!options.updatesOnly) {
       var value = this._value
       if (prop != null) {
         var subval = (value as any)[prop]
