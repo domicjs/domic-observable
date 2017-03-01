@@ -1063,6 +1063,9 @@ export type ObsFn = {
    * Add an observer to an observable and call it immediately.
    */
   observe<T>(a: MaybeObservable<T>, cbk: Observer<T>, options?: ObserveOptions<T>): UnregisterFn
+
+  or(...a: MaybeObservable<any>[]): Observable<boolean>
+  and(...a: MaybeObservable<any>[]): Observable<boolean>
 }
 
 
@@ -1105,4 +1108,31 @@ o.merge = function merge<A>(obj: MaybeObservableObject<A>): Observable<A> {
 
 o.indexable = function indexable<T>(obj: {[name: string]: MaybeObservable<T>}): IndexableObservable<T> {
   return new IndexableObservable<T>(obj)
+}
+
+
+o.or = function or(...a: MaybeObservable<any>[]): Observable<boolean> {
+  var deps: {[name: string]: MaybeObservable<any>} = {}
+  for (var i = 0; i < a.length; i++)
+    deps[i] = a[i]
+  return o.indexable(deps)
+    .tf((all): boolean => {
+      for (var x in all) {
+        if (all[x]) return true
+      }
+      return false
+    })
+}
+
+o.and = function and(...a: MaybeObservable<any>[]): Observable<boolean> {
+  var deps: {[name: string]: MaybeObservable<any>} = {}
+  for (var i = 0; i < a.length; i++)
+    deps[i] = a[i]
+  return o.indexable(deps)
+    .tf((all): boolean => {
+      for (var x in all) {
+        if (!all[x]) return false
+      }
+      return true
+    })
 }

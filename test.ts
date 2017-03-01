@@ -167,9 +167,23 @@ describe('Observable', function () {
   describe('boolean operations', function () {
     var test = o(false)
 
-    it ('#toggle()', () => {
+    it('#toggle()', () => {
       test.toggle()
       expect(test.get()).to.be.true
+    })
+
+    it('and/or work as expected', () => {
+      expect(o.or(true, false).get()).to.be.true
+      expect(o.and(true, false).get()).to.be.false
+
+      var t1 = o(true)
+      var t2 = o(false)
+      var t = o.and(t1, t2)
+      var sp = spyon(t)
+      expect(t.get()).to.be.false
+      t2.set(true)
+      sp.called.once.with(true)
+      expect(t.get()).to.be.true
     })
   })
 
