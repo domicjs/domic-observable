@@ -708,7 +708,7 @@ export abstract class DependantObservable<T> extends Observable<T> {
 
 export class MergeObservable<T> extends DependantObservable<T> {
 
-  constructor(public deps: MaybeObservableObject<T>) {
+  constructor(protected deps: MaybeObservableObject<T>) {
     super({} as any) // will be overridden later on
   }
 
@@ -783,6 +783,62 @@ export class MergeObservable<T> extends DependantObservable<T> {
   }
 
 }
+
+
+export class IndexableObservable<T> extends MergeObservable<{[name: string]: T}> {
+
+
+  protected deps: {[name: string]: MaybeObservable<T>} = {}
+  protected unregs: {[name: string]: UnregisterFn} = {}
+  public count: number = 0
+
+  constructor(deps: {[name: string]: MaybeObservable<T>}) {
+    super({})
+    for (var x in deps) {
+      this.addDependency(x, deps[x])
+    }
+  }
+
+  addDependency(name: string, dep: MaybeObservable<T>) {
+    this.deps[name] = dep
+    this.count++
+    if (!(dep instanceof Observable))
+      this._value[name] = dep
+  }
+
+  hasDependency(name: string) {
+    return this.deps[name] != null
+  }
+
+  removeDependency(obs: Observable<T>): void;
+  removeDependency(name: string): void;
+  removeDependency(arg: string|Observable<T>) {
+    var name = ''
+
+    if (typeof arg === 'string')
+      name = arg
+    else {
+      for (var x in this.deps) {
+        if (this.deps[x] === arg) {
+          name = x
+          break
+        }
+        // Fail silently
+        if (!name) return
+      }
+    }
+
+    if (this.deps[name]) this.count--
+    delete this._value[name]
+    delete this.deps[name]
+    // Also unregister observing.
+    if (this.unregs[name]) {
+      this.unregs[name]()
+      delete this.unregs[name]
+    }
+  }
+}
+
 
 
 /**
@@ -1001,6 +1057,8 @@ export type ObsFn = {
    */
   merge<T>(obj: MaybeObservableObject<T>): Observable<T>
 
+  indexable<T>(deps: {[name: string]: MaybeObservable<T>}): IndexableObservable<T>
+
   /**
    * Add an observer to an observable and call it immediately.
    */
@@ -1043,4 +1101,8 @@ o.observe = function <A>(obs: MaybeObservable<A>, observer: Observer<A>, options
 
 o.merge = function merge<A>(obj: MaybeObservableObject<A>): Observable<A> {
   return new MergeObservable(obj)
+}
+
+o.indexable = function indexable<T>(obj: {[name: string]: MaybeObservable<T>}): IndexableObservable<T> {
+  return new IndexableObservable<T>(obj)
 }

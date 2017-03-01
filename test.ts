@@ -420,6 +420,36 @@ describe('MergeObservable', function () {
 
 })
 
+describe('IndexableObservable', function () {
+  var c = o(4)
+  var test = o.indexable({a: 1, b: 2, c: c})
+
+  it('getting maybe observables or observable values should work', () => {
+    expect(test.get('a')).to.equal(1)
+    expect(test.get('c')).to.equal(4)
+
+    c.set(8)
+    expect(test.get('c')).to.equal(8)
+  })
+
+  it('can set internal values without problems', () => {
+    test.set('c', 9)
+    expect(test.get('c')).to.equal(9)
+  })
+
+  it('can be added dependencies', () => {
+    var d = o(11)
+    test.addDependency('d', d)
+    expect(test.get('d')).to.equal(11)
+  })
+
+  it('can have dependencies removed', () => {
+    test.removeDependency('d')
+    expect(test.get('d')).to.equal(undefined)
+  })
+
+})
+
 describe('Changes', function () {
   // Tests that verify here that the changes that are transmitted to
   // observers and such are actually the ones we expect.
