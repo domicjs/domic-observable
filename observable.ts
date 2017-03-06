@@ -125,7 +125,7 @@ export class Change<T> {
   }
 
   valueChanged() {
-    return this.new_value !== this.old_value && typeof this.old_value !== 'undefined'
+    return this.new_value !== this.old_value
   }
 
   props<U>(this: Change<U[]>): {
@@ -327,10 +327,10 @@ export class Observable<T> {
    * Note: Avoid using this method directly. Prefer the observe() method
    * available on Controller.
    */
-  addObserver(fn : Observer<T>, options?: ObserveOptions<T>): UnregisterFn
-  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions<U>, prop?: number): UnregisterFn
-  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions<T[P]>, prop?: P): UnregisterFn
-  addObserver(fn : Observer<any>, options?: ObserveOptions<any>, prop?: any) : UnregisterFn {
+  addObserver(fn : Observer<T>, options?: ObserveOptions): UnregisterFn
+  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
+  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions, prop?: P): UnregisterFn
+  addObserver(fn : Observer<any>, options?: ObserveOptions, prop?: any) : UnregisterFn {
     options = options || {}
     const path = (prop != null ? prop :
       options && options.ignoreChildren ? BASE_OBJECT_ONLY : ALL_PROPERTIES) as string
@@ -698,9 +698,9 @@ export abstract class DependantObservable<T> extends Observable<T> {
     return super.get(prop)
   }
 
-  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions<U>, prop?: number): UnregisterFn
-  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions<T[P]>, prop?: P): UnregisterFn
-  addObserver(fn : Observer<T>, options?: ObserveOptions<T>): UnregisterFn
+  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
+  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions, prop?: P): UnregisterFn
+  addObserver(fn : Observer<T>, options?: ObserveOptions): UnregisterFn
   addObserver(fn: any, options?: any, prop?: any) {
     if (!this.isBeingObserved()) {
       this._setupUnregisterFn()
@@ -1078,7 +1078,7 @@ export type ObsFn = {
   /**
    * Add an observer to an observable and call it immediately.
    */
-  observe<T>(a: MaybeObservable<T>, cbk: Observer<T>, options?: ObserveOptions<T>): UnregisterFn
+  observe<T>(a: MaybeObservable<T>, cbk: Observer<T>, options?: ObserveOptions): UnregisterFn
 
   or(...a: MaybeObservable<any>[]): Observable<boolean>
   and(...a: MaybeObservable<any>[]): Observable<boolean>
@@ -1106,7 +1106,7 @@ o.get = function <T>(v: MaybeObservable<T>): T {
  * just call the observer directly, unless the options specified `updatesOnly` in which
  * case nothing happen.
  */
-o.observe = function <A>(obs: MaybeObservable<A>, observer: Observer<A>, options?: ObserveOptions<A>): UnregisterFn {
+o.observe = function <A>(obs: MaybeObservable<A>, observer: Observer<A>, options?: ObserveOptions): UnregisterFn {
   if (obs instanceof Observable)
     return obs.addObserver(observer, options)
 
