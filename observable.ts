@@ -231,7 +231,7 @@ export class Observable<T> {
 
   get(p?: any) : any {
     if (p == null || p === '') return this._value
-    return (this._value as any)[p]
+    return (this._value == null ? {} : this._value as any)[p]
   }
 
   set(value: T): boolean
@@ -353,7 +353,7 @@ export class Observable<T> {
     if (!options.updatesOnly) {
       var value = this._value
       if (prop != null) {
-        var subval = (value as any)[prop]
+        var subval = value == null ? undefined :(value as any)[prop]
         fn(subval, C.create(subval))
       } else {
         fn(value, C.create(value))
@@ -994,7 +994,8 @@ export class TransformObservable<T, U> extends DependantObservable<U> {
     protected _revert: RevertFn<T, U> | undefined
     // protected _transformer: Transformer<T, U>
   ) {
-    super(_transform(_obs.get(), C.noop(_obs.get()))) // !!!
+    super(null as any)
+    this._value = _transform.call(this, _obs.get(), C.noop(_obs.get()))
   }
 
   /**
