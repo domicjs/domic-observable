@@ -81,7 +81,7 @@ afterEach(function () {
   unregs = []
 })
 
-function spyon<T>(obs: Observable<T>, opts: ObserveOptions<T> = {updatesOnly: true}) {
+function spyon<T>(obs: Observable<T>, opts: ObserveOptions = {updatesOnly: true}) {
   var spy = new Calls()
   unregs.push(obs.addObserver(function (value, changes) {
     spy.call(value, changes.new_value, changes.old_value)

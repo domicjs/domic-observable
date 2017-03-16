@@ -26,6 +26,11 @@ export interface ObserveOptions {
   updatesOnly?: boolean
 
   /**
+   * Do not re-call the observer if there was no change in the watched object.
+   */
+  changesOnly?: boolean
+
+  /**
    * Do not listen to children changes
    */
   ignoreChildren?: boolean
@@ -88,6 +93,15 @@ function throttle<T extends Function>(func: T, wait: number) {
   return func
 }
 
+function changeOnly(func: any) {
+  var old_value: any
+  return function (this: any, value: any) {
+    if (value !== old_value)
+      func(...Array.prototype.slice.call(arguments))
+    old_value = value
+  }
+}
+
 // Several possibilities ;
 // 1. The object changed completely
 // 2. The object itself didn't change, but one or several properties have
@@ -125,7 +139,7 @@ export class Change<T> {
   }
 
   valueChanged() {
-    return this.new_value !== this.old_value
+    return this.new_value !== this.old_value && typeof this.old_value !== undefined
   }
 
   props<U>(this: Change<U[]>): {
@@ -302,7 +316,7 @@ export class Observable<T> {
     if (props === null) {
       var y: any
       for (y in obss) {
-        var val = (this._value as any)[y]
+        var val = this._value != null ? (this._value as any)[y] : undefined
         // send a fake C.create
         obss[y].forEach((ob: Observer<T[keyof T]>) => ob(val, C.create(val)))
       }
@@ -348,6 +362,10 @@ export class Observable<T> {
 
     if (options.throttle) {
       fn = throttle(fn, options.throttle)
+    }
+
+    if (options.changesOnly) {
+      fn = changeOnly(fn)
     }
 
     if (!options.updatesOnly) {
@@ -1060,12 +1078,14 @@ export class TransformObservable<T, U> extends DependantObservable<U> {
  * */
 export type ObsFn = {
   <T>(a: MaybeObservable<T>): Observable<T>
+  <T>(a: MaybeObservable<T>|undefined|null): Observable<T|null>
 
   /**
    * Get the current value of the observable, or the value itself if the
    * provided parameter was not an observable.
    */
   get<T>(v: MaybeObservable<T>): T
+  get<T>(v: MaybeObservable<T>|undefined|null): T|null
 
   /**
    * Transform an object which values may be observables
