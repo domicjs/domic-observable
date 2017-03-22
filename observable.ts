@@ -297,8 +297,15 @@ export class Observable<T> {
 
     const obss = this._observers as any
     var x: keyof T
+    if (obss[ALL_PROPERTIES]) {
+      obss[ALL_PROPERTIES].forEach((ob: any) => ob(changes.new_value, changes))
+    }
 
     const props = changes.props()
+
+    if (props === null && changes.valueChanged() && obss[BASE_OBJECT_ONLY]) {
+      obss[BASE_OBJECT_ONLY].forEach((ob: any) => ob(changes.new_value, changes))
+    }
 
     if (props) {
       for (x in props) {
@@ -322,13 +329,6 @@ export class Observable<T> {
       }
     }
 
-    if (obss[ALL_PROPERTIES]) {
-      obss[ALL_PROPERTIES].forEach((ob: any) => ob(changes.new_value, changes))
-    }
-
-    if (props === null && changes.valueChanged() && obss[BASE_OBJECT_ONLY]) {
-      obss[BASE_OBJECT_ONLY].forEach((ob: any) => ob(changes.new_value, changes))
-    }
   }
 
   /**
@@ -684,7 +684,7 @@ export class Observable<T> {
  */
 export abstract class DependantObservable<T> extends Observable<T> {
 
-  protected _unregister: null|UnregisterFn
+  _unregister: null|UnregisterFn
 
   /**
    * This method has to be implemented by child classes.
