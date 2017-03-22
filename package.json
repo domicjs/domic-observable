@@ -1,6 +1,6 @@
 {
   "name": "domic-observable",
-  "version": "1.0.0-beta5",
+  "version": "1.0.0-beta6",
   "repository": "https://github.com/domicjs/domic-observable",
   "description": "Observables, domic style.",
   "license": "MIT",
