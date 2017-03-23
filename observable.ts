@@ -354,7 +354,6 @@ export class Observable<T> {
       oba[path] = []
 
     this._observers_count++
-    oba[path].push(fn)
 
     if (options.debounce) {
       fn = debounce(fn, options.debounce)
@@ -377,6 +376,8 @@ export class Observable<T> {
         fn(value, C.create(value))
       }
     }
+
+    oba[path].push(fn)
 
     return () => {
       this.removeObserver(fn, path)
