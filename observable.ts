@@ -239,18 +239,18 @@ export class Observable<T> {
     return this._observers_count > 0
   }
 
-  get(): T;
   get<K extends keyof T>(p: K): T[K];
   get<V>(this: Observable<V[]>, idx: number): V;
+  get(): T;
 
   get(p?: any) : any {
     if (p == null || p === '') return this._value
     return (this._value == null ? {} : this._value as any)[p]
   }
 
-  set(value: T): boolean
   set<K extends keyof T>(prop: K, value: T[K]): boolean
-  set<V>(this: Observable<V[]>, idx: number, value: V): boolean
+  set<U>(this: Observable<U[]>, idx: number, value: U): boolean
+  set(value: T): boolean
 
   set(prop: any, value?: any): boolean {
     let changed = false
@@ -342,8 +342,8 @@ export class Observable<T> {
    * available on Controller.
    */
   addObserver(fn : Observer<T>, options?: ObserveOptions): UnregisterFn
+  addObserver<K extends keyof T>(fn : Observer<T[K]>, options?: ObserveOptions, prop?: K): UnregisterFn
   addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
-  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions, prop?: P): UnregisterFn
   addObserver(fn : Observer<any>, options?: ObserveOptions, prop?: any) : UnregisterFn {
     options = options || {}
     const path = (prop != null ? prop :
@@ -402,10 +402,9 @@ export class Observable<T> {
    */
   prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
   prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
-
-  prop<U>(prop: any) : any {
+  prop(prop: any) : any {
     // we cheat here.
-    return new PropObservable<T, U>(this, prop as any)
+    return new PropObservable<T, any>(this, prop as any)
   }
 
   /**
@@ -704,10 +703,9 @@ export abstract class DependantObservable<T> extends Observable<T> {
    */
   protected abstract _setupUnregisterFn(): void
 
-  get(): T;
   get<K extends keyof T>(p: K): T[K]
-  // get<A>(p: string): A
-  get<A>(this: Observable<A[]>, idx: number): A
+  get<U>(this: Observable<U[]>, idx: number): U
+  get(): T;
 
   get(prop?: any): any {
     if (!this.isBeingObserved()) {
@@ -717,9 +715,9 @@ export abstract class DependantObservable<T> extends Observable<T> {
     return super.get(prop)
   }
 
-  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
-  addObserver<P extends keyof T>(fn : Observer<T[P]>, options?: ObserveOptions, prop?: P): UnregisterFn
   addObserver(fn : Observer<T>, options?: ObserveOptions): UnregisterFn
+  addObserver<K extends keyof T>(fn : Observer<T[K]>, options?: ObserveOptions, prop?: K): UnregisterFn
+  addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
   addObserver(fn: any, options?: any, prop?: any) {
     if (!this.isBeingObserved()) {
       this._setupUnregisterFn()
@@ -879,9 +877,9 @@ export class IndexableObservable<T> extends MergeObservable<{[name: string]: T}>
 /**
  * An Observable based on another observable, watching only its subpath.
  */
-export class PropObservable<T, U> extends DependantObservable<U> {
+export class PropObservable<S, T> extends DependantObservable<T> {
 
-  constructor(protected _obs : Observable<T>, protected _prop : (keyof T|number)) {
+  constructor(protected _obs : Observable<S>, protected _prop : (keyof S|number)) {
     super(undefined as any) // FUCK YOU type checker that's why
   }
 
@@ -889,9 +887,9 @@ export class PropObservable<T, U> extends DependantObservable<U> {
     return this._obs.isPaused()
   }
 
-  set<K extends keyof U>(prop: K, value: U[K]): boolean
-  set<A>(this: Observable<A[]>, idx: number, value: A): boolean
-  set(value: U): boolean
+  set<K extends keyof T>(prop: K, value: T[K]): boolean
+  set<U>(this: Observable<U[]>, idx: number, value: U): boolean
+  set(value: T): boolean
   set(prop: any, value?: any): boolean {
     if (!this.isBeingObserved() || this.isPaused()) this._refresh() // we want to be sure we're up to date
       // with the upward object.
@@ -930,13 +928,13 @@ export class PropObservable<T, U> extends DependantObservable<U> {
   protected _setupUnregisterFn() {
     this._unregister = this._obs.addObserver((value, changes) => {
       // we need to use this trick because typescript makes no link between U and T
-      var chg: Change<U> = changes as any
+      var chg: Change<T> = changes as any
       if (typeof changes.old_value === 'undefined')
         chg.old_value = this._value
       this._refresh()
 
       this.notify(chg)
-    }, {}, this._prop as keyof T)
+    }, {}, this._prop as keyof S)
   }
 
   protected _refresh() {
@@ -948,12 +946,10 @@ export class PropObservable<T, U> extends DependantObservable<U> {
    * We just want to avoid handling PropObservable based on other
    * PropObservables.
    */
-  prop<K extends keyof U>(p: K): PropObservable<U, U[K]>
-  // prop<V>(prop: string): Observable<V>;
-  prop<V>(this: Observable<V[]>, prop: number): PropObservable<V[], V>
-  // prop<V>(this: Observable<V[]>, prop: number): PropObservable<U, V>;
-  prop<V>(prop : keyof T|number) : PropObservable<any, V> {
-    return new PropObservable<any, V>(this, prop as any)
+  prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
+  prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
+  prop(prop: any) : any {
+    return new PropObservable<any, any>(this, prop as any)
   }
 
   oHasNext<T>(this: PropObservable<T[], T>): Observable<boolean> {
@@ -979,7 +975,7 @@ export class PropObservable<T, U> extends DependantObservable<U> {
   /**
    * Change the property being watched
    */
-  setProp(p: keyof T|number) {
+  setProp(p: keyof S|number) {
     this._prop = p
 
     // If we're being observed, notify the change.
@@ -1005,12 +1001,12 @@ export class PropObservable<T, U> extends DependantObservable<U> {
 }
 
 
-export class TransformObservable<T, U> extends DependantObservable<U> {
+export class TransformObservable<S, T> extends DependantObservable<T> {
 
   constructor(
-    protected _obs: Observable<T>,
-    protected _transform: TransformFn<T, U>,
-    protected _revert: RevertFn<T, U> | undefined
+    protected _obs: Observable<S>,
+    protected _transform: TransformFn<S, T>,
+    protected _revert: RevertFn<S, T> | undefined
     // protected _transformer: Transformer<T, U>
   ) {
     super(null as any)
@@ -1022,7 +1018,8 @@ export class TransformObservable<T, U> extends DependantObservable<U> {
    * forwards the set to its observed.
    */
   set<K extends keyof T>(prop: K, value: T[K]): boolean;
-  set(value: U): boolean;
+  set<U>(this: Observable<U[]>, idx: number, value: U): boolean
+  set(value: T): boolean;
   set(value: any, value2?: any): boolean {
     var cur: any = this._value
     let old_value = this._value
