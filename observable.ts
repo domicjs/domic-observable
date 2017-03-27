@@ -448,11 +448,19 @@ export class Observable<T> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
   }
 
+  greaterThan(value: MaybeObservable<T>): Observable<boolean> {
+    return this.gt(value)
+  }
+
   /**
    * true when this._value < value
    */
   lt(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
+  }
+
+  lesserThan(value: MaybeObservable<T>): Observable<boolean> {
+    return this.lt(value)
   }
 
   /**
@@ -462,11 +470,20 @@ export class Observable<T> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
   }
 
+  equal(value: MaybeObservable<T>): Observable<boolean> {
+    return this.eq(value)
+  }
+
+
   /**
    * true when this._value !== value
    */
   ne(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
+  }
+
+  notEqual(value: MaybeObservable<T>): Observable<boolean> {
+    return this.ne(value)
   }
 
   /**
@@ -476,11 +493,19 @@ export class Observable<T> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
   }
 
+  greaterOrEqual(value: MaybeObservable<T>): Observable<boolean> {
+    return this.gte(value)
+  }
+
   /**
    * true when this._value <= value
    */
   lte(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
+  }
+
+  lesserOrEqual(value: MaybeObservable<T>): Observable<boolean> {
+    return this.lte(value)
   }
 
   /**
