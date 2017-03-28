@@ -2,7 +2,7 @@
 export type UnregisterFn = () => void
 
 
-export type MaybeObservable<T> = Observable<T> | T
+export type MaybeObservable<T> = T | Observable<T>
 
 
 /**
@@ -1100,6 +1100,8 @@ export class TransformObservable<S, T> extends DependantObservable<T> {
  * 		o(Any|Observable) -> Observable
  * */
 export type ObsFn = {
+  <T>(a: MaybeObservable<T[]>): Observable<T[]>
+  <T>(a: MaybeObservable<T[]>|undefined|null): Observable<T[]|null>
   <T>(a: MaybeObservable<T>): Observable<T>
   <T>(a: MaybeObservable<T>|undefined|null): Observable<T|null>
 
