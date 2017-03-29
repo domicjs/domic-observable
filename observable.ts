@@ -257,7 +257,7 @@ export class Observable<T> {
     var val = this._value as any
     const old_value = this._value
 
-    if (typeof value !== 'undefined') {
+    if (arguments.length > 1) {
       var old_prop = val[prop]
       val[prop] = value
       changed = old_prop !== value
@@ -266,7 +266,7 @@ export class Observable<T> {
         var chg = C.noop(this._value)
           .set(prop, C.create(val[prop], old_prop))
 
-        this.notify(chg)
+        this.change(chg)
       }
 
     } else {
@@ -274,10 +274,14 @@ export class Observable<T> {
       changed = this._value !== value
       this._value = value
       if (changed) {
-        this.notify(C.create(this._value, old_value))
+        this.change(C.create(this._value, old_value))
       }
     }
     return changed
+  }
+
+  public change(changes?: Change<T>) {
+    this.notify(changes || C.noop(this._value))
   }
 
   /**
@@ -607,99 +611,103 @@ export class Observable<T> {
   }
 
   add(this: Observable<number>, inc: number) {
-    this.set(this._value + inc)
+    this.set(this.get() + inc)
     return this
   }
 
   sub(this: Observable<number>, dec: number) {
-    this.set(this._value - dec)
+    this.set(this.get() - dec)
     return this
   }
 
   mul(this: Observable<number>, coef: number) {
-    this.set(this._value * coef)
+    this.set(this.get() * coef)
     return this
   }
 
   div(this: Observable<number>, coef: number) {
-    this.set(this._value / coef)
+    this.set(this.get() / coef)
     return this
   }
 
   mod(this: Observable<number>, m: number) {
-    this.set(this._value % m)
+    this.set(this.get() % m)
     return this
   }
 
   // ARRAY METHODS
 
   push<U>(this: Observable<U[]>, v: U) {
-    let res = this._value.push(v)
+    var value = this.get()
+    var res = value.push(v)
 
-    this.notify(
-      C.create(this._value, this._value)
-        .set('length', C.create(this._value.length, this._value.length - 1))
-        .set(this._value.length - 1, C.create(v))
+    this.change(
+      C.create(value, value)
+        .set('length', C.create(value.length, value.length - 1))
+        .set(value.length - 1, C.create(v))
     )
 
     return res
   }
 
   pop<U>(this: Observable<U[]>): U|undefined {
-    if (this._value.length === 0)
+    var value = this.get()
+
+    if (value.length === 0)
       return
 
-    let res = this._value.pop()
+    var res = value.pop()
 
-    this.notify(
-      C.create(this._value, this._value)
-        .set('length', C.create(this._value.length, this._value.length + 1))
-        .set(this._value.length, C.create())
+    this.change(
+      C.create(value, value)
+        .set('length', C.create(value.length, value.length + 1))
+        .set(value.length, C.create())
     )
 
     return res
   }
 
   shift<U>(this: Observable<U[]>): U|undefined {
-    let res = this._value.shift()
+    var value = this.get()
+    var res = value.shift()
 
     // this should retrigger all the prop observables.
-    this.notify()
+    this.change()
 
     return res
   }
 
   unshift<U>(this: Observable<U[]>, v: U) {
-    let res = this._value.unshift(v)
-    this.notify()
+    var res = this.get().unshift(v)
+    this.change()
     return res
   }
 
   sort<U>(this: Observable<U[]>, fn: (a: U, b: U) => number) {
     // FIXME sort function type
-    let res = this._value.sort(fn)
+    var res = this.get().sort(fn)
 
-    this.notify()
+    this.change()
 
     return res
   }
 
   splice<U>(this: Observable<U[]>, start: number, deleteCount: number, ...items: U[]) {
     // FIXME arguments
-    let res = this._value.splice(start, deleteCount, ...items)
-    this.notify()
+    var res = this.get().splice(start, deleteCount, ...items)
+    this.change()
     return res
   }
 
   reverse<U>(this: Observable<U[]>) {
-    let res = this._value.reverse()
-    this.notify()
+    var res = this.get().reverse()
+    this.change()
     return res
   }
 
   concat(this: Observable<T[]>, arr: T[]) {
-    var res = this._value = this._value.concat(arr)
-    this.notify()
+    var res = this._value = this.get().concat(arr)
+    this.change()
     return res
   }
 
@@ -806,7 +814,7 @@ export class MergeObservable<T> extends DependantObservable<T> {
       const old = this.deps[prop]
       this.deps[prop] = value;
       (this._value as any)[prop] = value
-      this.notify(C.noop(this._value)
+      this.change(C.noop(this._value)
         .set(prop, C.create(value, old)))
 
       return old !== value
@@ -844,7 +852,7 @@ export class MergeObservable<T> extends DependantObservable<T> {
       if (dep instanceof Observable) {
         unregs.push(dep.addObserver((val, changes) => {
           this._value[x] = val // typescript gets confused here.
-          this.notify(C.noop(this._value)
+          this.change(C.noop(this._value)
             .set(x, C.create(val, changes ? changes.old_value : undefined)))
         }))
       } else
@@ -944,23 +952,20 @@ export class PropObservable<S, T> extends DependantObservable<T> {
 
       current[prop] = value
 
-      // Now, find the top most observable that is not a PropObservable
-      // and notify it of the change.
-      var chg = C.noop<any>(current)
-        .set(prop, C.create<any>(value, old))
-
-      var iter: any = this
-      while (iter instanceof PropObservable) {
-        chg = C.noop<any>(iter._obs.get())
-          .set(iter._prop as any, chg)
-        iter = iter._obs as any
-      }
-      iter.notify(chg)
+      this.change(C.noop(current).set(prop, C.create(value, old)))
       return true
     } else {
       // If no sub-prop is mentionned, just delegate the set
       return this._obs.set(this._prop as any, prop)
     }
+  }
+
+  public change(changes?: Change<T>) : void {
+    return this._obs.change(
+      C.noop(this._obs.get())
+        .set(this._prop as any, (changes || C.noop<any>(this.get())) as any
+      ) as any
+    )
   }
 
   /**
