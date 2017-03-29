@@ -590,6 +590,22 @@ export class Observable<T> {
     this.set(!this._value)
   }
 
+  plus(this: Observable<number>, pl: Observable<number>) {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs + rhs)
+  }
+
+  minus(this: Observable<number>, pl: Observable<number>) {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs - rhs)
+  }
+
+  times(this: Observable<number>, pl: Observable<number>) {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs * rhs)
+  }
+
+  dividedBy(this: Observable<number>, pl: Observable<number>) {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs / rhs)
+  }
+
   add(this: Observable<number>, inc: number) {
     this.set(this._value + inc)
     return this
@@ -1100,10 +1116,9 @@ export class TransformObservable<S, T> extends DependantObservable<T> {
  * 		o(Any|Observable) -> Observable
  * */
 export type ObsFn = {
-  <T>(a: MaybeObservable<T[]>): Observable<T[]>
-  <T>(a: MaybeObservable<T[]>|undefined|null): Observable<T[]|null>
   <T>(a: MaybeObservable<T>): Observable<T>
   <T>(a: MaybeObservable<T>|undefined|null): Observable<T|null>
+  <T>(a: MaybeObservable<T[]>): Observable<T[]>
 
   /**
    * Get the current value of the observable, or the value itself if the
