@@ -90,7 +90,27 @@ function debounce<T extends Function>(fn: T, ms: number) {
 }
 
 function throttle<T extends Function>(func: T, wait: number) {
-  return func
+  var timeout: number|null = null
+  var last_this: any = null
+  var last_args: any = []
+
+  return function (this: any, ...a: any[]) {
+    // Do not call the function if it already was called
+    if (timeout != null) {
+      last_this = this
+      last_args = a
+      return
+    }
+
+    // If there is no active timeout, just call the function
+    func.apply(this, a)
+    timeout = setTimeout(function () {
+      timeout = null
+      func.apply(last_this, last_args)
+      last_this = null
+      last_args = []
+    }, wait)
+  }
 }
 
 function changeOnly(func: any) {
@@ -178,8 +198,8 @@ export class Change<T> {
     return this
   }
 
-  p<P extends keyof T>(p: P): Change<T[P]>
-  p<U>(this: Change<U[]>, p: number): Change<U>
+  p<P extends keyof T>(p: P): Change<T[P]> | undefined
+  p<U>(this: Change<U[]>, p: number): Change<U> | undefined
   p(p: keyof T|number): any {
     return this._props ? this._props[p] : undefined
   }
@@ -404,20 +424,20 @@ export class Observable<T> {
   /**
    *
    */
-  prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
-  prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
-  prop(prop: any) : any {
+  prop<K extends keyof T>(prop: K, options?: ObserveOptions): PropObservable<T, T[K]>
+  prop<U>(this: Observable<U[]>, prop: number, options?: ObserveOptions): PropObservable<U[], U>
+  prop(prop: any, options?: ObserveOptions) : any {
     // we cheat here.
-    return new PropObservable<T, any>(this, prop as any)
+    return new PropObservable<T, any>(this, prop as any, options)
   }
 
   /**
    *
    */
-  p<K extends keyof T>(prop: K): PropObservable<T, T[K]>
-  p<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>;
-  p(prop: any): any {
-    return this.prop(prop)
+  p<K extends keyof T>(prop: K, options?: ObserveOptions): PropObservable<T, T[K]>
+  p<U>(this: Observable<U[]>, prop: number, options?: ObserveOptions): PropObservable<U[], U>;
+  p(prop: any, options?: ObserveOptions): any {
+    return this.prop(prop, options)
   }
 
   // tf<U>(transformer: Transformer<T, U> | TransformFn<T, U>) : TransformObservable<T, U> {
@@ -428,11 +448,21 @@ export class Observable<T> {
   //   return new TransformObservable<T, U>(this, transformer as Transformer<T, U>)
   // }
 
-  tf<U>(transform: TransformFn<T, U>, revert?: RevertFn<T, U>) : TransformObservable<T, U> {
+  tf<U>(transform: TransformFn<T, U>): TransformObservable<T, U>
+  tf<U>(transform: TransformFn<T, U>, options: ObserveOptions): TransformObservable<T, U>
+  tf<U>(transform: TransformFn<T, U>, revert: RevertFn<T, U>): TransformObservable<T, U>
+  tf<U>(transform: TransformFn<T, U>, revert: RevertFn<T, U>, options: ObserveOptions): TransformObservable<T, U>
+  tf<U>(transform: TransformFn<T, U>, revert?: RevertFn<T, U> | ObserveOptions, options?: ObserveOptions) : TransformObservable<T, U> {
+
+    if (typeof revert !== 'function') {
+      options = revert
+      revert = undefined
+    }
 
     return new TransformObservable<T, U>(this,
       transform,
-      revert
+      revert,
+      options
     )
 
     // if (typeof transformer === 'function') {
@@ -832,12 +862,12 @@ export class MergeObservable<T> extends DependantObservable<T> {
     }
   }
 
-  prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
-  prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
+  prop<K extends keyof T>(prop: K, options?: ObserveOptions): PropObservable<T, T[K]>
+  prop<U>(this: Observable<U[]>, prop: number, options?: ObserveOptions): PropObservable<U[], U>
 
-  prop(prop: any) : any {
+  prop(prop: any, options?: ObserveOptions) : any {
     var dep = this.deps[prop]
-    return dep instanceof Observable ? dep : super.prop(prop)
+    return dep instanceof Observable ? dep : super.prop(prop, options)
   }
 
   // We need to override prop so that it gives the correct object
@@ -928,7 +958,7 @@ export class IndexableObservable<T> extends MergeObservable<{[name: string]: T}>
  */
 export class PropObservable<S, T> extends DependantObservable<T> {
 
-  constructor(protected _obs : Observable<S>, protected _prop : (keyof S|number)) {
+  constructor(protected _obs : Observable<S>, protected _prop : (keyof S|number), protected _options?: ObserveOptions) {
     super(undefined as any) // FUCK YOU type checker that's why
   }
 
@@ -980,7 +1010,7 @@ export class PropObservable<S, T> extends DependantObservable<T> {
       this._refresh()
 
       this.notify(chg)
-    }, {}, this._prop as keyof S)
+    }, this._options || {}, this._prop as keyof S)
   }
 
   protected _refresh() {
@@ -992,10 +1022,10 @@ export class PropObservable<S, T> extends DependantObservable<T> {
    * We just want to avoid handling PropObservable based on other
    * PropObservables.
    */
-  prop<K extends keyof T>(prop: K): PropObservable<T, T[K]>
-  prop<U>(this: Observable<U[]>, prop: number): PropObservable<U[], U>
-  prop(prop: any) : any {
-    return new PropObservable<any, any>(this, prop as any)
+  prop<K extends keyof T>(prop: K, options?: ObserveOptions): PropObservable<T, T[K]>
+  prop<U>(this: Observable<U[]>, prop: number, options?: ObserveOptions): PropObservable<U[], U>
+  prop(prop: any, options?: ObserveOptions) : any {
+    return new PropObservable<any, any>(this, prop as any, options)
   }
 
   oHasNext<T>(this: PropObservable<T[], T>): Observable<boolean> {
@@ -1052,7 +1082,8 @@ export class TransformObservable<S, T> extends DependantObservable<T> {
   constructor(
     protected _obs: Observable<S>,
     protected _transform: TransformFn<S, T>,
-    protected _revert: RevertFn<S, T> | undefined
+    protected _revert: RevertFn<S, T> | undefined,
+    protected _options: ObserveOptions | undefined
     // protected _transformer: Transformer<T, U>
   ) {
     super(null as any)
@@ -1106,7 +1137,7 @@ export class TransformObservable<S, T> extends DependantObservable<T> {
       // do not call if the value of the object did not change.
       if (old !== this._value)
         this.notify(C.create(this._value, old))
-    })
+    }, this._options || {})
   }
 
 }
