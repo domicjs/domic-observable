@@ -463,12 +463,13 @@ export class Observable<T> {
 
     if (typeof transform !== 'function') {
       options = transform
-      transform = function (a: any) { return a }
+      transform = function (a: any) { return a } as TransformFn<T, T>
+      revert = function (obs: Observable<T>, value: T) { obs.set(value) } as RevertFn<T, T>
     }
 
     return new TransformObservable<T, U>(this,
       transform as any,
-      revert,
+      revert as any,
       options
     )
 
