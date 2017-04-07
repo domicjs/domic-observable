@@ -92,24 +92,25 @@ function debounce<T extends Function>(fn: T, ms: number) {
 function throttle<T extends Function>(func: T, wait: number) {
   var timeout: number|null = null
   var last_this: any = null
-  var last_args: any = []
+  var last_args: any = null
+  var last_call: number | null = null
 
   return function (this: any, ...a: any[]) {
-    // Do not call the function if it already was called
-    if (timeout != null) {
+    var now = Date.now()
+
+    if (last_call == null || now - last_call >= wait && timeout == null) {
+      last_call = now
+      func.apply(this, a)
+    } else {
       last_this = this
       last_args = a
-      return
+      if (timeout != null) return
+      timeout = setTimeout(function () {
+        last_call = Date.now()
+        func.apply(last_this, last_args)
+        timeout = null
+      }, wait - (now - last_call))
     }
-
-    // If there is no active timeout, just call the function
-    func.apply(this, a)
-    timeout = setTimeout(function () {
-      timeout = null
-      func.apply(last_this, last_args)
-      last_this = null
-      last_args = []
-    }, wait)
   }
 }
 
@@ -452,15 +453,21 @@ export class Observable<T> {
   tf<U>(transform: TransformFn<T, U>, options: ObserveOptions): TransformObservable<T, U>
   tf<U>(transform: TransformFn<T, U>, revert: RevertFn<T, U>): TransformObservable<T, U>
   tf<U>(transform: TransformFn<T, U>, revert: RevertFn<T, U>, options: ObserveOptions): TransformObservable<T, U>
-  tf<U>(transform: TransformFn<T, U>, revert?: RevertFn<T, U> | ObserveOptions, options?: ObserveOptions) : TransformObservable<T, U> {
+  tf(options: ObserveOptions): TransformObservable<T, T>
+  tf<U>(transform: TransformFn<T, U> | ObserveOptions, revert?: RevertFn<T, U> | ObserveOptions, options?: ObserveOptions) : TransformObservable<T, U> {
 
     if (typeof revert !== 'function') {
       options = revert
       revert = undefined
     }
 
+    if (typeof transform !== 'function') {
+      options = transform
+      transform = function (a: any) { return a }
+    }
+
     return new TransformObservable<T, U>(this,
-      transform,
+      transform as any,
       revert,
       options
     )
