@@ -983,7 +983,7 @@ export class PropObservable<S, T> extends DependantObservable<T> {
 
     if (arguments.length > 1) {
       var current = this._value as any
-      var old = current[prop];
+      var old = current != null ? current[prop] : undefined;
 
       // do nothing if the value is the same.
       if (old === value) return false
