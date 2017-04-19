@@ -74,8 +74,6 @@ export interface Transformer<T, U> {
 /////////////////////////////// CLASS DEFINITIONS //////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
-const BASE_OBJECT_ONLY = Symbol('base')
-const ALL_PROPERTIES = Symbol('all_props')
 
 function debounce<T extends Function>(fn: T, ms: number) {
   var timeout: number|null = null
@@ -214,6 +212,16 @@ export type ObserverObject<T> = {
 // Internal
 const C = Change
 
+function _remove_obs(arr: Observer<any>[] | undefined | null, obs: Observer<any>): boolean {
+  if (!arr) return false
+  var index = arr.indexOf(obs)
+  if (index > -1) {
+    arr.splice(index, 1)
+    return true
+  }
+  return false
+}
+
 /**
  *
  */
@@ -221,6 +229,8 @@ export class Observable<T> {
 
   protected _value : T
   protected _observers: ObserverObject<T>
+  protected _all: Observer<T>[] | null = null
+  protected _object_only: Observer<T>[] | null = null
   protected _observers_count = 0
   protected _changes: Change<T> | null = null
 
@@ -322,14 +332,14 @@ export class Observable<T> {
 
     const obss = this._observers as any
     var x: keyof T
-    if (obss[ALL_PROPERTIES]) {
-      obss[ALL_PROPERTIES].forEach((ob: any) => ob(changes.new_value, changes))
+    if (this._all && this._all.length > 0) {
+      this._all.forEach((ob: any) => ob(changes.new_value, changes))
     }
 
     const props = changes.props()
 
-    if (props === null && changes.valueChanged() && obss[BASE_OBJECT_ONLY]) {
-      obss[BASE_OBJECT_ONLY].forEach((ob: any) => ob(changes.new_value, changes))
+    if (props === null && changes.valueChanged() && this._object_only && this._object_only.length > 0) {
+      this._object_only.forEach((ob: any) => ob(changes.new_value, changes))
     }
 
     if (props) {
@@ -369,14 +379,8 @@ export class Observable<T> {
   addObserver(fn : Observer<T>, options?: ObserveOptions): UnregisterFn
   addObserver<K extends keyof T>(fn : Observer<T[K]>, options?: ObserveOptions, prop?: K): UnregisterFn
   addObserver<U>(this: Observable<U[]>, fn: Observer<U>, options?: ObserveOptions, prop?: number): UnregisterFn
-  addObserver(fn : Observer<any>, options?: ObserveOptions, prop?: any) : UnregisterFn {
+  addObserver(fn : Observer<any>, options?: ObserveOptions, prop?: string|number) : UnregisterFn {
     options = options || {}
-    const path = (prop != null ? prop :
-      options && options.ignoreChildren ? BASE_OBJECT_ONLY : ALL_PROPERTIES) as string
-
-    const oba = this._observers as any
-    if (!oba[path])
-      oba[path] = []
 
     this._observers_count++
 
@@ -402,23 +406,37 @@ export class Observable<T> {
       }
     }
 
-    oba[path].push(fn)
+    if (prop != null) {
+      const oba = this._observers
+      if (!oba[prop])
+        oba[prop] = []
+
+      oba[prop]!.push(fn)
+    } else {
+      if (options.ignoreChildren) {
+        if (!this._object_only) this._object_only = []
+        this._object_only.push(fn)
+      } else {
+        if (!this._all) this._all = []
+        this._all.push(fn)
+      }
+
+    }
 
     return () => {
-      this.removeObserver(fn, path)
+      this.removeObserver(fn, prop)
     }
   }
 
   /**
    * Remove an observer function from this observable.
    */
-  removeObserver(fn : Observer<T>, path: string) : void {
-    const obs_array = (this._observers as any)[path]
-    const index = obs_array ? obs_array.indexOf(fn) : -1
-
-    if (index > -1) {
-      obs_array.splice(index, 1)
-      this._observers_count--
+  removeObserver(fn : Observer<T>, path?: string|number) : void {
+    if (path != null) {
+      if (_remove_obs(this._observers[path], fn)) this._observers_count--
+    } else {
+      if (_remove_obs(this._all, fn)) this._observers_count--
+      if (_remove_obs(this._object_only, fn)) this._observers_count--
     }
   }
 

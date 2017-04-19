@@ -254,7 +254,7 @@ describe('PropObservable', function () {
 
     it('observers are not called on a different child', () => {
       test.set('b', 43)
-      expect(called_a).to.have.not.been.called
+      called_a.was.not.called
 
     })
 
