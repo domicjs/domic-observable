@@ -761,10 +761,15 @@ export class Observable<T> {
     return res
   }
 
-  concat(this: Observable<T[]>, arr: T[]) {
+  concat<U>(this: Observable<U[]>, arr: U[]) {
     var res = this._value = this.get().concat(arr)
     this.change()
     return res
+  }
+
+  remove<U>(this: Observable<U[]>, element: U) {
+    var idx = this.get().indexOf(element)
+    return this.splice(idx, 1)
   }
 
   //////////////////////////////////////
