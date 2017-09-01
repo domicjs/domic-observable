@@ -1,15 +1,13 @@
 
 export type UnregisterFunction = () => void
 
-export type ObserverFunction<T, U = void> = (newval: T, oldval: T | undefined) => U
+export type Observer<T, U = void> = (newval: T, oldval: T | undefined) => U
 
 
 /**
  * Options that determine how we are to listen to different types of updates.
  */
-export interface ObserverObject<T, U = void> {
-
-  fn: ObserverFunction<T, U>
+export interface ObserverOptions {
 
   /**
    * Call the observer after this many milliseconds after the last update.
@@ -28,8 +26,18 @@ export interface ObserverObject<T, U = void> {
 
 }
 
-export type Observer<T, U = void> = ObserverFunction<T, U> | ObserverObject<T, U>
 
+function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
+  var last_value: A
+  var last_result: B
+  return function (arg: A, old: A): B {
+    if (arg === last_value)
+      return last_result
+    last_value = arg
+    last_result = fn(arg, old)
+    return last_result
+  }
+}
 
 /**
  *
@@ -37,14 +45,9 @@ export type Observer<T, U = void> = ObserverFunction<T, U> | ObserverObject<T, U
 export class Observable<T> {
 
   protected value: T
-  protected observers: ObserverFunction<T>[] = []
-  protected observed: ObserverFunction<any>[] = []
+  protected observers: Observer<T>[] = []
+  protected observed: Observer<any>[] = []
   protected unregs: UnregisterFunction[] = []
-
-  static getObserverFunction<T, U>(ob: Observer<T, U>): ObserverFunction<T, U> {
-    // FIXME apply debounce, throttle, etc.
-    return typeof ob === 'function' ? ob : ob.fn
-  }
 
   static cloneObject<T extends object>(object: T): T {
     return null
@@ -58,6 +61,16 @@ export class Observable<T> {
   get<T extends object>(this: Observable<T>): Readonly<T>
   get(): T
   get(): any {
+    return this.value
+  }
+
+  /**
+   * Get a shallow copy of the current value. Used for transforms.
+   */
+  getCopy(): T {
+    if (this.value instanceof Object) {
+
+    }
     return this.value
   }
 
@@ -76,11 +89,10 @@ export class Observable<T> {
   /**
    * Add an observer.
    */
-  addObserver(ob: Observer<T>): UnregisterFunction {
-    const fn = Observable.getObserverFunction(ob)
+  addObserver(fn: Observer<T>, options?: ObserverOptions): UnregisterFunction {
     this.observers.push(fn)
 
-    if (typeof ob === 'function' || !ob.updatesOnly) {
+    if (typeof options === 'function' || options && !options.updatesOnly) {
       // First call
       fn(this.get(), undefined)
     }
@@ -107,42 +119,44 @@ export class Observable<T> {
    * is being observed.
    */
   observe<U>(observable: Observable<U>, observer: Observer<U>) {
-    this.observed.push(Observable.getObserverFunction(observer))
+    this.observed.push(observer)
 
     if (this.observers.length > 0) {
       // start observing immediately.
     }
   }
 
-  tf<U>(fnget: Observer<T, U>, fnset?: Observer<U, T>): Observable<U> {
-    const g = Observable.getObserverFunction(fnget)
-
-    // ! Attention ici risque de boucle infinie !!!
+  tf<U>(fnget: Observer<T, U>, fnset?: (orig_obs: this, new_value: U, old_value: U | undefined) => void): Observable<U> {
 
     // Create the new observable
-    const obs = new Observable(g(this.get(), undefined))
+    const obs = new Observable<U>(undefined!)
+
+    // ooooh this is hacky...
+    const get = memoize(fnget)
+    obs.get = (() => get(this.get(), this.get())) as any
 
     // WARNING il faudrait plutôt remplacer son get() par cette fonction
     // avec une forme de memoization, etant donné que si il n'est pas observé
     // sa valeur ne se mettra pas à jour et son get() renverra uniquement
     // la première valeur reçue.
-    obs.observe(this, function (value, old) { obs.set(g(value, old)) })
+    obs.observe(this, function (value, old) { obs.set(get(value, old)) })
 
     if (fnset) {
-      const s = Observable.getObserverFunction(fnset)
-      obs.observe(obs, (value, old) => { this.set(s(value, old)) })
+      obs.observe(obs, (value, old) => { fnset(this, value, old) })
     }
 
     return obs
   }
 
-  p<U>(this: Observable<U[]>, key: number): Observable<U> {
+  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
+  p<U>(this: Observable<U[]>, key: number): Observable<U>
+  p(this: Observable<any>, key: number|string): Observable<any> {
     return this.tf(
       (arr) => arr[key],
-      (item) => {
-        const arr = this.get().slice()
+      (obs, item) => {
+        const arr = obs.getCopy()
         arr[key] = item
-        return arr
+        obs.set(arr)
       }
     )
   }
@@ -163,42 +177,15 @@ export class Observable<T> {
           return res
         })
       },
-      (transformed_array) => {
+      (obs, transformed_array) => {
         const len = transformed_array.length
-        var local_array: U[] = this.get().slice()
+        var local_array: U[] = this.getCopy()
         for (var i = 0; i < len; i++) {
           local_array[indexes[i]] = transformed_array[i]
         }
-        return local_array
+        obs.set(local_array)
       }
     )
   }
-
-  map<U, V>(this: Observable<U[]>, transformer: (item: U, index:number, array: U[]) => V): ReadonlyObservable<V[]> {
-
-  }
-
-}
-
-
-// On veut pouvoir contrôler si un tf s'update souvent depuis son parent
-// ou si il update celui-ci fréquemment aussi
-
-export class TransformObservable<Q, T> extends Observable<T> {
-
-  constructor(getter: any) {
-    super(undefined)
-  }
-
-
-}
-
-
-/**
- * An Observable variant that doesn't allow the use of set()
- * Generally used by observables that did .tf() without providing
- * a set function, like for instance what the .map() method does.
- */
-export class ReadonlyObservable<T> extends Observable<T> {
 
 }
