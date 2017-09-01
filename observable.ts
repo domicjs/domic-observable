@@ -75,11 +75,19 @@ export class Observable<T> {
     const ob = typeof fn === 'function' ? {fn} : fn
     this.observers.push(ob)
 
-    ob.unreg = () => {
-      this.observers = this.observers.filter(f => f !== fn)
-    }
+    ob.unreg = this.removeObserver.bind(this, fn) as UnregisterFunction
+    
+    // register our own observers to other observables
 
     return ob.unreg
+  }
+  
+  removeObserver(fn: Observer<T>): void {
+    this.observers = this.observers.filter(f => f !== fn)
+    
+    if (this.observers.length === 0) {
+      // unregister from the observables we were obsering
+    }
   }
 
   /**
@@ -88,6 +96,10 @@ export class Observable<T> {
    */
   observe<U>(observable: Observable<U>, observer: Observer<U>) {
     this.observed.push(_get_observer_object(observer))
+
+    if (this.observers.length > 0) {
+      // start observing immediately.
+    }
   }
 
   tf<U>(fnget: Observer<T, U>, fnset?: Observer<U, T>): Observable<U> {
@@ -97,6 +109,11 @@ export class Observable<T> {
 
     // Create the new observable
     const obs = new Observable(g.fn(this.get(), undefined))
+
+    // WARNING il faudrait plutôt remplacer son get() par cette fonction
+    // avec une forme de memoization, etant donné que si il n'est pas observé
+    // sa valeur ne se mettra pas à jour et son get() renverra uniquement
+    // la première valeur reçue.
     obs.observe(this, function (value, old) { obs.set(g.fn(value, old)) })
     
     if (fnset) {
