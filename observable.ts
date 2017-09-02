@@ -1,7 +1,9 @@
 
 export type UnregisterFunction = () => void
 
-export type Observer<T, U = void> = (newval: T, oldval: T | undefined) => U
+export type Observer<T, U = void> = (newval: T, oldval: T) => U
+
+export type MaybeObservable<T> = T | Observable<T>
 
 
 /**
@@ -49,31 +51,53 @@ export class Observable<T> {
   protected observed: Observer<any>[] = []
   protected unregs: UnregisterFunction[] = []
 
-  static cloneObject<T extends object>(object: T): T {
-    return null
-  }
-
   constructor(value: T) {
     this.set(value)
   }
 
-  get<U>(this: Observable<U[]>): ReadonlyArray<U>
-  get<T extends object>(this: Observable<T>): Readonly<T>
-  get(): T
-  get(): any {
+  /**
+   * Return the underlying value of this Observable
+   *
+   * NOTE: treat this value as being entirely readonly !
+   */
+  get(): T {
     return this.value
   }
 
   /**
    * Get a shallow copy of the current value. Used for transforms.
    */
-  getCopy(): T {
-    if (this.value instanceof Object) {
+  getShallowCopy(): T {
 
+    if (this.value instanceof Array) {
+      return this.value.slice() as any
     }
+
+    if (this.value instanceof Object) {
+      var descrs: {[name: string]: PropertyDescriptor} = {}
+
+      for (var prop of Object.getOwnPropertyNames(this.value)) {
+        descrs[prop] = Object.getOwnPropertyDescriptor(this.value, prop)
+      }
+
+      for (var sym of Object.getOwnPropertySymbols(this.value)) {
+        descrs[sym] = Object.getOwnPropertyDescriptor(this.value, sym)
+      }
+
+      var clone = Object.create(
+        this.value.constructor.prototype,
+        descrs
+      )
+      return clone
+    }
+
     return this.value
   }
 
+  /**
+   *
+   * @param value
+   */
   set(value: T): T {
     const old_value = this.value
     this.value = value
@@ -81,6 +105,12 @@ export class Observable<T> {
     return this.value
   }
 
+  /**
+   * Notify all the registered observers that is Observable changed
+   * value.
+   *
+   * @param old_value The old value of this observer
+   */
   notify(old_value: T) {
     for (var ob of this.observers)
       ob(this.value, old_value)
@@ -94,7 +124,8 @@ export class Observable<T> {
 
     if (typeof options === 'function' || options && !options.updatesOnly) {
       // First call
-      fn(this.get(), undefined)
+      const obj = this.get()
+      fn(obj, obj)
     }
 
     // Subscribe to the observables we are meant to subscribe to.
@@ -131,18 +162,31 @@ export class Observable<T> {
     // Create the new observable
     const obs = new Observable<U>(undefined!)
 
-    // ooooh this is hacky...
+    // memoize the fnget as it may be called multiple times even though
+    // the parent observable didn't change.
     const get = memoize(fnget)
+
+    // We use a form of monkey patching to replace the get() method,
+    // as this observable won't observe its parent until it gets
+    // observed itself and thus not update its value.
     obs.get = (() => get(this.get(), this.get())) as any
 
-    // WARNING il faudrait plutôt remplacer son get() par cette fonction
-    // avec une forme de memoization, etant donné que si il n'est pas observé
-    // sa valeur ne se mettra pas à jour et son get() renverra uniquement
-    // la première valeur reçue.
-    obs.observe(this, function (value, old) { obs.set(get(value, old)) })
+    var change_by_parent = false
+    obs.observe(this, function (value, old) {
+      // we mark the fact that this change came from the original
+      // observable.
+      change_by_parent = true
+      obs.set(get(value, old))
+    })
 
     if (fnset) {
-      obs.observe(obs, (value, old) => { fnset(this, value, old) })
+      obs.observe(obs, (value, old) => {
+        // If the change came initially from this observable, then don't
+        // try to set it back.
+        if (!change_by_parent)
+          fnset(this, value, old)
+        change_by_parent = false
+      })
     }
 
     return obs
@@ -154,7 +198,7 @@ export class Observable<T> {
     return this.tf(
       (arr) => arr[key],
       (obs, item) => {
-        const arr = obs.getCopy()
+        const arr = obs.getShallowCopy()
         arr[key] = item
         obs.set(arr)
       }
@@ -177,15 +221,48 @@ export class Observable<T> {
           return res
         })
       },
-      (obs, transformed_array) => {
+      (obs, transformed_array, old_transformed) => {
         const len = transformed_array.length
-        var local_array: U[] = this.getCopy()
+
+        if (old_transformed && len !== old_transformed.length)
+            throw new Error(`filtered arrays may not change size by themselves`)
+
+        var local_array: U[] = this.getShallowCopy()
         for (var i = 0; i < len; i++) {
           local_array[indexes[i]] = transformed_array[i]
         }
         obs.set(local_array)
       }
     )
+  }
+
+}
+
+
+export function o<T>(arg: MaybeObservable<T>): Observable<T> {
+  if (arg instanceof Observable)
+    return arg
+  return new Observable(arg)
+}
+
+
+export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
+
+
+export namespace o {
+
+  export function merge<A>(obj: MaybeObservableObject<A>): Observable<A> {
+
+    const obs = new Observable<A>({} as any)
+
+    for (let prop in obj) {
+      obs.observe(obj[prop], new_value => {
+        obs.p(prop).set(new_value)
+      })
+    }
+
+    return obs
+
   }
 
 }
