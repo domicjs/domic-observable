@@ -159,6 +159,9 @@ export class Observable<T> {
     const obj = {observable, observer} as ObsObject
     this.observed.push(obj)
 
+    // const current_val = observable.get()
+    // obj.observer(current_val, current_val)
+
     if (this.observers.length > 0) {
       // start observing immediately if we're already observed
       obj.unreg = obj.observable.addObserver(obj.observer)
