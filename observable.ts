@@ -41,6 +41,8 @@ function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
   }
 }
 
+export type ObsObject = {observable: Observable<any>, observer: Observer<any>, unreg?: UnregisterFunction}
+
 /**
  *
  */
@@ -48,8 +50,7 @@ export class Observable<T> {
 
   protected value: T
   protected observers: Observer<T>[] = []
-  protected observed: Observer<any>[] = []
-  protected unregs: UnregisterFunction[] = []
+  protected observed: ObsObject[] = []
 
   constructor(value: T) {
     this.set(value)
@@ -129,6 +130,11 @@ export class Observable<T> {
     }
 
     // Subscribe to the observables we are meant to subscribe to.
+    if (this.observers.length === 1) {
+      this.observed.forEach(obj => {
+        obj.unreg = obj.observable.addObserver(obj.observer)
+      })
+    }
 
     return this.removeObserver.bind(this, fn) as UnregisterFunction
   }
@@ -141,7 +147,7 @@ export class Observable<T> {
     this.observers = this.observers.filter(f => f !== fn)
 
     if (this.observers.length === 0) {
-      // unregister from the observables we were obsering
+      this.observed.forEach(o => o.unreg!())
     }
   }
 
@@ -150,14 +156,16 @@ export class Observable<T> {
    * is being observed.
    */
   observe<U>(observable: Observable<U>, observer: Observer<U>) {
-    this.observed.push(observer)
+    const obj = {observable, observer} as ObsObject
+    this.observed.push(obj)
 
     if (this.observers.length > 0) {
-      // start observing immediately.
+      // start observing immediately if we're already observed
+      obj.unreg = obj.observable.addObserver(obj.observer)
     }
   }
 
-  tf<U>(fnget: Observer<T, U>, fnset?: (orig_obs: this, new_value: U, old_value: U | undefined) => void): Observable<U> {
+  tf<U>(fnget: Observer<T, U>, fnset?: (orig_obs: this, new_value: U, old_value: U) => void): Observable<U> {
 
     // Create the new observable
     const obs = new Observable<U>(undefined!)
@@ -180,13 +188,14 @@ export class Observable<T> {
     })
 
     if (fnset) {
-      obs.observe(obs, (value, old) => {
-        // If the change came initially from this observable, then don't
-        // try to set it back.
-        if (!change_by_parent)
-          fnset(this, value, old)
-        change_by_parent = false
-      })
+      const original = this
+      obs.set = function (this: Observable<U>, value: any) {
+        if (!change_by_parent) {
+          fnset(original, value, this.value)
+          change_by_parent = false
+        }
+        return value
+      } as any
     }
 
     return obs
