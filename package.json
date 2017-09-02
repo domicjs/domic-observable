@@ -10,7 +10,7 @@
     "build": "tsc",
     "prepublish": "npm run build",
     "watch": "tsc -w",
-    "test": "tscc test.ts && mocha",
+    "test": "tsc test.ts && mocha",
     "dev": "parallel -u ::: 'tscc -w' 'ls *.js | entr mocha -R dot '"
   },
   "dependencies": {

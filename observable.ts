@@ -251,18 +251,43 @@ export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
 
 export namespace o {
 
-  export function merge<A>(obj: MaybeObservableObject<A>): Observable<A> {
+  export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A> {
 
     const obs = new Observable<A>({} as any)
+    const props: {[name: string]: Observable<A[keyof A]>} = {}
 
     for (let prop in obj) {
-      obs.observe(obj[prop], new_value => {
-        obs.p(prop).set(new_value)
-      })
+      props[prop] = obs.p(prop)
+
+      if (obj[prop] instanceof Observable) {
+        obs.observe(obj[prop] as Observable<A[keyof A]>, new_value => {
+          props[prop].set(new_value)
+        })
+
+      } else {
+        props[prop].set(obj[prop] as A[keyof A])
+      }
     }
+
+    // This observer does not depend on any kind of lifecycle, so
+    // it is always active
+    obs.addObserver((newvalue) => {
+      for (var prop in obj)
+        if (obj[prop] instanceof Observable)
+          (obj[prop] as Observable<A[keyof A]>).set(newvalue[prop])
+    })
 
     return obs
 
+  }
+
+  export function observe<A>(obs: MaybeObservable<A>, fn: Observer<A>): UnregisterFunction {
+    if (obs instanceof Observable) {
+      return obs.addObserver(fn)
+    }
+
+    fn(obs, obs)
+    return function () { }
   }
 
 }
