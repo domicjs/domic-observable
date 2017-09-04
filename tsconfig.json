@@ -10,12 +10,12 @@
         "noImplicitThis": true,
         "noUnusedLocals": true,
 	"strictNullChecks": true,
-        "outDir": ".",
+        "outDir": "build",
         "lib": ["es6", "dom"]
     },
     "files": [
         "./observable.ts",
-	"./test.ts"
+	"./test/test.ts"
     ]
 
 }

@@ -70,11 +70,10 @@ export class Observable<T> {
    *
    * @param value
    */
-  set(value: T): T {
+  set(value: T): void {
     const old_value = this.value;
     (this.value as any) = value
     if (old_value !== value) this.notify(old_value)
-    return this.value
   }
 
 
@@ -410,46 +409,28 @@ export class Observable<T> {
 }
 
 
-export class TransformObservable<A, B> extends Observable<B> {
-
-  last_original_value: A
-
-  constructor(
-    protected original_observer: Observable<A>,
-    protected fnget: (a: A) => B,
-    protected fnset: (b: B) => A
-  ) {
-    super(undefined!)
-  }
-
-  get(): B {
-    const upstream = this.original_observer.get()
-    if (this.last_original_value !== upstream) {
-      this.last_original_value = upstream;
-      (this.value as any) = this.fnget(upstream)
-    }
-    return this.value
-  }
-
-  set(value: B): B {
-
-    return this.value
-  }
-
-}
-
-
 /**
- *
+ * An observable that does not its own value, but that depends
+ * from outside getters and setters.
  */
-export class MergeObservable<A> extends Observable<A> {
-
+export class VirtualObservable<T> extends Observable<T> {
 
   constructor(
-    protected original_observers: MaybeObservableObject<A>
+    protected fnget: () => T,
+    protected fnset: (b: T) => void
   ) {
     super(undefined!)
   }
+
+  get(): T {
+    return this.fnget()
+  }
+
+  set(value: T) {
+    // Missing a way of not recursing infinitely.
+    this.fnset(value)
+  }
+
 }
 
 
@@ -464,6 +445,9 @@ export interface ReadonlyObservable<A> extends Observable<A> {
   p<U>(this: Observable<U[]>, key: number): ReadonlyObservable<U>
 
   filter<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]>
+
+  add: void
+  substract: void
   toggle: void
 }
 
@@ -527,5 +511,5 @@ export namespace o {
 
 }
 
-var a = o(true).readonly()
-a.toggle()
+// some have a value
+// some are a cache to another value
