@@ -49,7 +49,7 @@ export type ObsObject = {observable: Observable<any>, observer: Observer<any>, u
  */
 export class Observable<T> {
 
-  protected value: T
+  protected readonly value: T
   protected observers: Observer<T>[] = []
   protected observed: ObsObject[] = []
 
@@ -71,8 +71,8 @@ export class Observable<T> {
    * @param value
    */
   set(value: T): T {
-    const old_value = this.value
-    this.value = value
+    const old_value = this.value;
+    (this.value as any) = value
     if (old_value !== value) this.notify(old_value)
     return this.value
   }
@@ -425,8 +425,8 @@ export class TransformObservable<A, B> extends Observable<B> {
   get(): B {
     const upstream = this.original_observer.get()
     if (this.last_original_value !== upstream) {
-      this.last_original_value = upstream
-      this.value = this.fnget(upstream)
+      this.last_original_value = upstream;
+      (this.value as any) = this.fnget(upstream)
     }
     return this.value
   }
