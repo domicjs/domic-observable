@@ -64,8 +64,14 @@ describe('basic operations', () => {
     expect(o_deep_a2.get()).to.equal(3)
   })
 
-  it('merge observable', () => {
+  it('merge observable get/set', () => {
     const om = o.merge({one: o_simple, two: o_deep})
     expect(om.p('one').get()).to.equal(0)
+
+    const o_one = om.p('one')
+    expect(o_one.get()).to.equal(0)
+    o_one.set(2)
+    expect(o_one.get()).to.equal(2)
+    expect(o_simple.get()).to.equal(2)
   })
 })

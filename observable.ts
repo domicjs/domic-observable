@@ -24,9 +24,68 @@ export interface ObserverOptions {
   /**
    * Do not call the observer immediately after being added.
    */
-  updatesOnly?: boolean
+  changesOnly?: boolean
 
 }
+
+
+export function debounce<T extends Function>(fn: T, ms: number): T {
+  var timeout: number|null = null
+  return function (this: any, ...a: any[]) {
+    var self: any = this
+    if (timeout !== null) clearTimeout(timeout)
+    timeout = setTimeout(function () {
+      timeout = null
+      fn.apply(self, a)
+    }, ms)
+  } as any as T
+}
+
+
+export function throttle<T extends Function>(fn: T, ms: number): T {
+  var timeout: number|null = null
+  var last_this: any = null
+  var last_args: any = null
+  var last_call: number | null = null
+
+  return function (this: any, ...a: any[]) {
+    var now = Date.now()
+
+    if (last_call == null || now - last_call >= ms && timeout == null) {
+      last_call = now
+      fn.apply(this, a)
+    } else {
+      last_this = this
+      last_args = a
+      if (timeout != null) return
+      timeout = setTimeout(function () {
+        last_call = Date.now()
+        fn.apply(last_this, last_args)
+        timeout = null
+      }, ms - (now - last_call))
+    }
+  } as any as T
+
+}
+
+export function make_observer<T>(fn: Observer<T>, options: ObserverOptions) {
+  var last_val: T | undefined
+
+  function observer(new_value: T) {
+    if (typeof last_val !== 'undefined' && new_value !== last_val)
+      fn(new_value, last_val)
+    last_val = new_value
+  }
+
+  if (options.debounce)
+    return debounce(observer, options.debounce)
+
+  if (options.throttle)
+    return throttle(observer, options.throttle)
+
+  return observer
+}
+
 
 
 function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
@@ -54,7 +113,7 @@ export class Observable<T> {
   protected observed: ObsObject[] = []
 
   constructor(value: T) {
-    this.set(value)
+    this.value = value
   }
 
   /**
@@ -70,10 +129,11 @@ export class Observable<T> {
    *
    * @param value
    */
-  set(value: T): void {
+  set(value: T): T {
     const old_value = this.value;
     (this.value as any) = value
     if (old_value !== value) this.notify(old_value)
+    return this.value
   }
 
 
@@ -417,7 +477,7 @@ export class VirtualObservable<T> extends Observable<T> {
 
   constructor(
     protected fnget: () => T,
-    protected fnset: (b: T) => void
+    protected fnset: (b: T) => T
   ) {
     super(undefined!)
   }
@@ -426,9 +486,9 @@ export class VirtualObservable<T> extends Observable<T> {
     return this.fnget()
   }
 
-  set(value: T) {
+  set(value: T): T {
     // Missing a way of not recursing infinitely.
-    this.fnset(value)
+    return this.fnset(value)
   }
 
 }
@@ -472,31 +532,29 @@ export namespace o {
 
   export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A> {
 
-    const obs = new Observable<A>({} as any)
-    const props: {[name: string]: Observable<A[keyof A]>} = {}
+    function _get(): A {
+      const res = {} as A
 
-    for (let prop in obj) {
-      props[prop] = obs.p(prop)
-
-      if (obj[prop] instanceof Observable) {
-        obs.observe(obj[prop] as Observable<A[keyof A]>, new_value => {
-          props[prop].set(new_value)
-        })
-
-      } else {
-        props[prop].set(obj[prop] as A[keyof A])
+      for (var name in obj) {
+        res[name] = o.get(obj[name])
       }
+
+      return res
     }
 
-    // This observer does not depend on any kind of lifecycle, so
-    // it is always active
-    obs.addObserver((newvalue) => {
-      for (var prop in obj)
-        if (obj[prop] instanceof Observable)
-          (obj[prop] as Observable<A[keyof A]>).set(newvalue[prop])
-    })
+    function _set(_obj: A): A {
+      for (var name in _obj) {
+        var ob = obj[name]
+        if (ob instanceof Observable) {
+          ob.set(_obj[name])
+        }
+      }
+      return _obj
+    }
 
-    return obs
+    const res = new VirtualObservable(_get, _set)
+
+    return res
 
   }
 
