@@ -229,6 +229,10 @@ export class Observable<T> {
     this.observers = this.observers.filter(f => f !== fn)
 
     if (this.observers.length === 0) {
+      // Since we're not being watched anymore we unregister
+      // ourselves from the observables we were watching to
+      // have them lose their reference to us and thus allow
+      // us to be garbage collected if needed.
       this.observed.forEach(o => o.unreg!())
     }
   }
@@ -240,9 +244,6 @@ export class Observable<T> {
   observe<U>(observable: Observable<U>, observer: Observer<U>) {
     const obj = {observable, observer} as ObsObject
     this.observed.push(obj)
-
-    // const current_val = observable.get()
-    // obj.observer(current_val, current_val)
 
     if (this.observers.length > 0) {
       // start observing immediately if we're already observed
