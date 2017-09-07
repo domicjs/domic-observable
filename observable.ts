@@ -113,6 +113,7 @@ export class Observable<T> {
   protected readonly value: T
   protected observers: ((val: T) => void)[] = []
   protected observed: ObsObject[] = []
+  protected paused_notify = -1
 
   constructor(value: T) {
     this.value = value
@@ -169,6 +170,18 @@ export class Observable<T> {
     return value
   }
 
+  pause() {
+    if (this.paused_notify === -1)
+      this.paused_notify = 0
+  }
+
+  resume() {
+    const frozen = this.paused_notify
+    this.paused_notify = -1
+    if (frozen > 0)
+      this.notify()
+  }
+
   /**
    * Notify all the registered observers that is Observable changed
    * value.
@@ -176,8 +189,12 @@ export class Observable<T> {
    * @param old_value The old value of this observer
    */
   notify() {
-    for (var ob of this.observers)
-      ob(this.value)
+    if (this.paused_notify > -1) {
+      this.paused_notify++
+    } else {
+      for (var ob of this.observers)
+        ob(this.value)
+    }
   }
 
   /**
@@ -256,10 +273,7 @@ export class Observable<T> {
       return fn(this.get())
     }, fnset)
 
-    obs.observe(this, () => {
-      // this will refresh its internal value.
-      obs.refresh()
-    })
+    obs.observe(this, () => obs.refresh())
 
     return obs
   }
@@ -551,9 +565,7 @@ export namespace o {
     for (var name in obj) {
       var ob = obj[name]
       if (ob instanceof Observable) {
-        res.observe(ob, (val, old) => {
-          res.refresh()
-        })
+        res.observe(ob, () => res.refresh())
       }
     }
 
@@ -571,6 +583,3 @@ export namespace o {
   }
 
 }
-
-// some have a value
-// some are a cache to another value

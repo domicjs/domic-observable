@@ -84,5 +84,10 @@ describe('basic operations', () => {
     simple_spy.was.called.once.with(4, 0)
     expect(o_one.get()).to.equal(4)
     spy.was.called.once.with(4, 0)
+
+    o_simple.set(5)
+    expect(o_one.get()).to.equal(5)
+    spy.was.called.once.with(5, 4)
+    simple_spy.was.called.once.with(5, 4)
   })
 })
