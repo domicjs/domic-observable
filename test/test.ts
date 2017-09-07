@@ -74,4 +74,15 @@ describe('basic operations', () => {
     expect(o_one.get()).to.equal(2)
     expect(o_simple.get()).to.equal(2)
   })
+
+  it('merge observable addObserver', () => {
+    const om = o.merge({one: o_simple, two: o_deep})
+    const o_one = om.p('one')
+    const spy = spyon(o_one)
+    o_one.set(4)
+
+    simple_spy.was.called.once.with(4, 0)
+    expect(o_one.get()).to.equal(4)
+    spy.was.called.once.with(4, 0)
+  })
 })

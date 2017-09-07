@@ -68,19 +68,19 @@ export function throttle<T extends Function>(fn: T, ms: number): T {
 
 }
 
-export function make_observer<T>(fn: Observer<T>, options: ObserverOptions) {
-  var last_val: T | undefined
+export function make_observer<T, U>(fn: Observer<T, U>, init: T, options?: ObserverOptions) {
+  var last_val: T = init
 
   function observer(new_value: T) {
-    if (typeof last_val !== 'undefined' && new_value !== last_val)
-      fn(new_value, last_val)
+    const res = fn(new_value, last_val)
     last_val = new_value
+    return res
   }
 
-  if (options.debounce)
+  if (typeof options !== 'undefined' && options.debounce)
     return debounce(observer, options.debounce)
 
-  if (options.throttle)
+  if (typeof options !== 'undefined' && options.throttle)
     return throttle(observer, options.throttle)
 
   return observer
@@ -90,11 +90,13 @@ export function make_observer<T>(fn: Observer<T>, options: ObserverOptions) {
 
 function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
   var last_value: A
+  var last_value_bis: A
   var last_result: B
   return function (arg: A, old: A): B {
-    if (arg === last_value)
+    if (arg === last_value && old === last_value_bis)
       return last_result
     last_value = arg
+    last_value_bis = old
     last_result = fn(arg, old)
     return last_result
   }
@@ -109,7 +111,7 @@ export type ObsObject = {observable: Observable<any>, observer: Observer<any>, u
 export class Observable<T> {
 
   protected readonly value: T
-  protected observers: Observer<T>[] = []
+  protected observers: ((val: T) => void)[] = []
   protected observed: ObsObject[] = []
 
   constructor(value: T) {
@@ -129,11 +131,10 @@ export class Observable<T> {
    *
    * @param value
    */
-  set(value: T): T {
+  set(value: T): void {
     const old_value = this.value;
     (this.value as any) = value
-    if (old_value !== value) this.notify(old_value)
-    return this.value
+    if (old_value !== value) this.notify()
   }
 
 
@@ -174,18 +175,20 @@ export class Observable<T> {
    *
    * @param old_value The old value of this observer
    */
-  notify(old_value: T) {
+  notify() {
     for (var ob of this.observers)
-      ob(this.value, old_value)
+      ob(this.value)
   }
 
   /**
    * Add an observer.
    */
   addObserver(fn: Observer<T>, options?: ObserverOptions): UnregisterFunction {
-    this.observers.push(fn)
 
-    if (typeof options === 'function' || options && !options.updatesOnly) {
+    const real_fn = make_observer(fn, this.get(), options)
+    this.observers.push(real_fn)
+
+    if (typeof options === 'function' || options && !options.changesOnly) {
       // First call
       const obj = this.get()
       fn(obj, obj)
@@ -198,7 +201,7 @@ export class Observable<T> {
       })
     }
 
-    return this.removeObserver.bind(this, fn) as UnregisterFunction
+    return this.removeObserver.bind(this, real_fn) as UnregisterFunction
   }
 
   /**
@@ -244,39 +247,19 @@ export class Observable<T> {
    * @param fnset
    */
   tf<U>(fnget: Observer<T, U>): ReadonlyObservable<U>
-  tf<U>(fnget: Observer<T, U>, fnset: (orig_obs: this, new_value: U, old_value: U) => void): Observable<U>
-  tf<U>(fnget: Observer<T, U>, fnset?: (orig_obs: this, new_value: U, old_value: U) => void): Observable<U> {
+  tf<U>(fnget: Observer<T, U>, fnset: Observer<U, T>): Observable<U>
+  tf<U>(fnget: Observer<T, U>, fnset?: Observer<U, T>): Observable<U> {
 
-    // Create the new observable
-    const obs = new Observable<U>(undefined!)
+    const fn = make_observer(memoize(fnget), this.get())
 
-    // memoize the fnget as it may be called multiple times even though
-    // the parent observable didn't change.
-    const get = memoize(fnget)
+    var obs = new VirtualObservable<U>(() => {
+      return fn(this.get())
+    }, fnset)
 
-    // We use a form of monkey patching to replace the get() method,
-    // as this observable won't observe its parent until it gets
-    // observed itself and thus not update its value.
-    obs.get = (() => get(this.get(), this.get())) as any
-
-    var change_by_parent = false
-    obs.observe(this, function (value, old) {
-      // we mark the fact that this change came from the original
-      // observable.
-      change_by_parent = true
-      obs.set(get(value, old))
+    obs.observe(this, () => {
+      // this will refresh its internal value.
+      obs.refresh()
     })
-
-    if (fnset) {
-      const original = this
-      obs.set = function (this: Observable<U>, value: any) {
-        if (!change_by_parent) {
-          fnset(original, value, this.value)
-          change_by_parent = false
-        }
-        return value
-      } as any
-    }
 
     return obs
   }
@@ -286,10 +269,10 @@ export class Observable<T> {
   p(this: Observable<any>, key: number|string): Observable<any> {
     return this.tf(
       (arr) => arr[key],
-      (obs, item) => {
-        const arr = obs.getShallowCopy()
+      (item) => {
+        const arr = this.getShallowCopy()
         arr[key] = item
-        obs.set(arr)
+        this.set(arr)
       }
     )
   }
@@ -310,7 +293,7 @@ export class Observable<T> {
           return res
         })
       },
-      (obs, transformed_array, old_transformed) => {
+      (transformed_array, old_transformed) => {
         const len = transformed_array.length
 
         if (old_transformed && len !== old_transformed.length)
@@ -320,7 +303,8 @@ export class Observable<T> {
         for (var i = 0; i < len; i++) {
           local_array[indexes[i]] = transformed_array[i]
         }
-        obs.set(local_array)
+        this.set(local_array)
+        return transformed_array
       }
     )
   }
@@ -477,18 +461,28 @@ export class VirtualObservable<T> extends Observable<T> {
 
   constructor(
     protected fnget: () => T,
-    protected fnset: (b: T) => T
+    protected fnset?: Observer<T>
   ) {
     super(undefined!)
   }
 
-  get(): T {
-    return this.fnget()
+  refresh() {
+    const val = this.fnget()
+    const old = this.value;
+    (this.value as any) = val
+    if (old !== val) this.notify()
   }
 
-  set(value: T): T {
+  get(): T {
+    if (this.observers.length === 0)
+      this.refresh()
+    return this.value
+  }
+
+  set(value: T): void {
     // Missing a way of not recursing infinitely.
-    return this.fnset(value)
+    const old_value = this.value;
+    this.fnset!(value, old_value)
   }
 
 }
@@ -553,6 +547,15 @@ export namespace o {
     }
 
     const res = new VirtualObservable(_get, _set)
+
+    for (var name in obj) {
+      var ob = obj[name]
+      if (ob instanceof Observable) {
+        res.observe(ob, (val, old) => {
+          res.refresh()
+        })
+      }
+    }
 
     return res
 
