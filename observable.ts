@@ -539,6 +539,22 @@ export namespace o {
     return arg instanceof Observable ? arg.get() : arg
   }
 
+  export function and(...args: Observable<any>[]): Observable<boolean> {
+    if (args.length === 1)
+      return args[0].isTruthy()
+    return args.slice(1).reduce((lhs, rhs) =>
+      lhs.and(rhs)
+    , args[0])
+  }
+
+  export function or(...args: Observable<any>[]): Observable<boolean> {
+    if (args.length === 1)
+      return args[0].isTruthy()
+    return args.slice(1).reduce((lhs, rhs) =>
+      lhs.or(rhs)
+    , args[0])
+  }
+
   export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A> {
 
     function _get(): A {
