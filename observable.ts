@@ -92,7 +92,7 @@ export function make_observer<T, U>(fn: Observer<T, U>, init: T, options?: Obser
 
 
 
-function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
+export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
   var last_value: A
   var last_value_bis: A
   var last_result: B
@@ -275,7 +275,7 @@ export class Observable<T> {
   tf<U>(fnget: Observer<T, U>, fnset: Observer<U, T>): Observable<U>
   tf<U>(fnget: Observer<T, U>, fnset?: Observer<U, T>): Observable<U> {
 
-    const fn = make_observer(memoize(fnget), this.get())
+    const fn = make_observer(fnget, this.get())
 
     var obs = new VirtualObservable<U>(() => {
       return fn(this.get())
@@ -287,8 +287,8 @@ export class Observable<T> {
   }
 
   p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
-  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U>
-  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U>
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U | undefined>
+  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
   p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
     const obs = this.tf(
       (arr) => arr[o.get(key)],
@@ -314,14 +314,14 @@ export class Observable<T> {
   filter<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
     var indexes: number[] = []
     return this.tf(
-      (arr) => {
+      memoize((arr) => {
         indexes = []
         return arr.filter((item, index) => {
           var res = fn(item, index, arr)
           if (res) indexes.push(index)
           return res
         })
-      },
+      }),
       (transformed_array, old_transformed) => {
         const len = transformed_array.length
 

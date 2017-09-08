@@ -64,6 +64,21 @@ describe('basic operations', () => {
     deep_spy.was.called.once.with({a: 1, b: {c: 3}}, {a: 1, b: {c: 1}})
   })
 
+  it('observing a property with an observable', () => {
+    const o_arr = o([1, 2, 3])
+    const spy_arr = spyon(o_arr)
+    const o_prop = o(0)
+    const o_watched = o_arr.p(o_prop)
+    const spy = spyon(o_watched)
+
+    expect(o_watched.get()).to.equal(1)
+    o_prop.set(1)
+    spy.was.called.once.with(2, 1)
+    o_watched.set(7)
+    spy.was.called.once.with(7, 2)
+    spy_arr.was.called.once.with([1, 7, 3], [1, 2, 3])
+  })
+
   it('get/set on an unobserved property still returns the correct value', () => {
     const o_deep_a2 = o_deep.p('a')
     expect(o_deep_a2.get()).to.equal(1)
