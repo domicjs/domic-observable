@@ -280,10 +280,10 @@ export class Observable<T> {
    * @param fnset
    */
   tf<U>(fnget: Observer<T, U>): ReadonlyObservable<U>
-  tf<U>(fnget: Observer<T, U>, fnset: Observer<U, T>): Observable<U>
-  tf<U>(fnget: Observer<T, U>, fnset?: Observer<U, T>): Observable<U> {
+  tf<U>(fnget: Observer<T, U>, fnset: Observer<U>): Observable<U>
+  tf<U>(fnget: Observer<T, U>, fnset?: Observer<U>): Observable<U> {
 
-    const fn = make_observer(fnget, this.get())
+    const fn = make_observer(memoize(fnget), this.get())
 
     var obs = new VirtualObservable<U>(() => {
       return fn(this.get())
@@ -298,18 +298,20 @@ export class Observable<T> {
   p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U | undefined>
   p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
   p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
-    const obs = this.tf(
-      (arr) => arr[o.get(key)],
-      (item) => {
-        const arr = this.getShallowCopy()
-        arr[o.get(key)] = item
-        this.set(arr)
-      }
-    ) as VirtualObservable<any>
 
-    if (key instanceof Observable) {
+    const fn = make_observer((arr) => arr[o.get(key)], this.get())
+
+    var obs = new VirtualObservable(() => {
+      return fn(this.get())
+    }, item => {
+      const arr = this.getShallowCopy()
+      arr[o.get(key)] = item
+      this.set(arr)
+    })
+
+    obs.observe(this, () => obs.refresh())
+    if (key instanceof Observable)
       obs.observe(key, () => obs.refresh())
-    }
 
     return obs
   }
