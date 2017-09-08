@@ -152,6 +152,7 @@ export class Observable<T> {
   getShallowCopy(): T {
 
     const value = this.get()
+
     if (value instanceof Array) {
       return value.slice() as any
     }
@@ -160,11 +161,18 @@ export class Observable<T> {
       var descrs: {[name: string]: PropertyDescriptor} = {}
 
       for (var prop of Object.getOwnPropertyNames(value)) {
-        descrs[prop] = Object.getOwnPropertyDescriptor(value, prop)
+        var desc = Object.getOwnPropertyDescriptor(value, prop)
+        // Skip unconfigurable objects.
+        if (!desc.configurable)
+          continue
+        descrs[prop] = desc
       }
 
       for (var sym of Object.getOwnPropertySymbols(value)) {
-        descrs[sym] = Object.getOwnPropertyDescriptor(value, sym)
+        desc = Object.getOwnPropertyDescriptor(value, sym)
+        if (!desc.configurable)
+          continue
+        descrs[sym] = desc
       }
 
       var clone = Object.create(

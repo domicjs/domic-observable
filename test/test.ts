@@ -113,4 +113,13 @@ describe('basic operations', () => {
     spy.was.called.once.with(5, 4)
     simple_spy.was.called.once.with(5, 4)
   })
+
+  it('pausing and unpausing', () => {
+    o_simple.pause()
+    o_simple.set(1)
+    o_simple.set(2)
+    o_simple.set(3)
+    o_simple.resume()
+    simple_spy.was.called.once.with(3, 0)
+  })
 })
