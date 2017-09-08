@@ -122,4 +122,22 @@ describe('basic operations', () => {
     o_simple.resume()
     simple_spy.was.called.once.with(3, 0)
   })
+
+  it('filter', () => {
+    const o_arr = o([1, 2, 3, 4])
+    const o_f = o_arr.filter(v => v % 2 === 0)
+    const spy_f = spyon(o_f)
+
+    expect(o_f.get()).to.eql([2, 4])
+    o_arr.set([1, 2, 3, 4, 5, 6])
+    expect(o_f.get()).to.eql([2, 4, 6])
+    spy_f.was.called.once.with([2, 4, 6])
+
+    o_f.set([3, 5, 6])
+    spy_f.was.called.once.with([6])
+    expect(o_arr.get()).to.eql([1, 3, 3, 5, 5, 6])
+
+    // can't set a filtered array with a different length !
+    expect(() => { o_f.set([1, 2]) }).throws
+  })
 })
