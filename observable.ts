@@ -5,6 +5,10 @@ export type Observer<T, U = void> = (newval: T, oldval: T) => U
 
 export type MaybeObservable<T> = T | Observable<T>
 
+export type RecursivePartial<T> = {
+  [P in keyof T]?: RecursivePartial<T[P]>;
+};
+
 
 /**
  * Options that determine how we are to listen to different types of updates.
@@ -138,6 +142,9 @@ export class Observable<T> {
     if (old_value !== value) this.notify()
   }
 
+  assign(partial: RecursivePartial<T>): void {
+
+  }
 
   /**
    * Get a shallow copy of the current value. Used for transforms.
@@ -280,16 +287,23 @@ export class Observable<T> {
   }
 
   p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
-  p<U>(this: Observable<U[]>, key: number): Observable<U>
-  p(this: Observable<any>, key: number|string): Observable<any> {
-    return this.tf(
-      (arr) => arr[key],
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U>
+  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U>
+  p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
+    const obs = this.tf(
+      (arr) => arr[o.get(key)],
       (item) => {
         const arr = this.getShallowCopy()
-        arr[key] = item
+        arr[o.get(key)] = item
         this.set(arr)
       }
-    )
+    ) as VirtualObservable<any>
+
+    if (key instanceof Observable) {
+      obs.observe(key, () => obs.refresh())
+    }
+
+    return obs
   }
 
   /**
@@ -511,6 +525,7 @@ export interface ReadonlyObservable<A> extends Observable<A> {
   set(a: never): never
 
   p<U extends object, K extends keyof U>(this: Observable<U>, key: K): ReadonlyObservable<U[K]>
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): ReadonlyObservable<U>
   p<U>(this: Observable<U[]>, key: number): ReadonlyObservable<U>
 
   filter<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]>
