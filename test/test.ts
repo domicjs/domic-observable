@@ -14,10 +14,12 @@ beforeEach(() => {
   o_deep = o({a: 1, b: {c: 1}})
   o_simple = o(0)
   o_deep_a = o_deep.p('a')
+  o_deep_b = o_deep.p('b')
   o_deep_c = o_deep.p('b').p('c')
   deep_spy = spyon(o_deep)
   deep_c_spy = spyon(o_deep_c)
   deep_a_spy = spyon(o_deep_a)
+  deep_b_spy = spyon(o_deep_b)
   simple_spy = spyon(o_simple)
 })
 
@@ -28,11 +30,13 @@ afterEach(function () {
 var o_deep = o({a: 1, b: {c: 1}})
 var o_simple = o(0)
 var o_deep_a = o_deep.p('a')
+var o_deep_b = o_deep.p('b')
 var o_deep_c = o_deep.p('b').p('c')
 var simple_spy = spyon(o_simple)
 var deep_spy = spyon(o_deep)
 var deep_c_spy = spyon(o_deep_c)
 var deep_a_spy = spyon(o_deep_a)
+var deep_b_spy = spyon(o_deep_b)
 
 
 describe('basic operations', () => {
@@ -53,7 +57,11 @@ describe('basic operations', () => {
   })
 
   it('observing a property gets called when changing', () => {
-
+    o_deep_c.set(3)
+    expect(o_deep_c.get()).to.equal(3)
+    deep_c_spy.was.called.once.with(3, 1)
+    deep_b_spy.was.called.once.with({c: 3}, {c: 1})
+    deep_spy.was.called.once.with({a: 1, b: {c: 3}}, {a: 1, b: {c: 1}})
   })
 
   it('get/set on an unobserved property still returns the correct value', () => {
