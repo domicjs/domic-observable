@@ -66,7 +66,7 @@ export function spyon<T>(obs: Observable<T>) {
   var spy = new Calls()
   unregs.push(obs.addObserver(function (value, old) {
     spy.call(value, old)
-  }))
+  }, false))
   return spy
 }
 
