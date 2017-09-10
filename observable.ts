@@ -27,6 +27,8 @@ export interface ObserverOptions {
    */
   throttle?: number
 
+  leading?: boolean
+
 }
 
 
@@ -80,24 +82,26 @@ export class ThrottleObserver<A, B> extends Observer<A, B> {
   last_call: number
   timeout: number | null
 
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number) {
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number, public leading: boolean) {
     super(fn, observable)
   }
 
   call(new_value: A): B {
-    const now = performance.now()
+    const now = Date.now()
 
     var result = this.last_result
     this.last_value = new_value
 
-    if (!this.last_call || this.last_call - now > this.throttle) {
+    if (!this.last_call || now - this.last_call >= this.throttle) {
       result = super.call(new_value)
+      this.last_result = result
     } else {
       if (!this.timeout) {
         this.timeout = setTimeout(() => {
-          this.call(this.last_value!)
+          super.call(this.last_value!)
+          this.last_call = Date.now()
           this.timeout = null
-        })
+        }, this.throttle - (now - this.last_call))
       }
     }
     this.last_call = now
@@ -113,7 +117,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
   saved_result: B
   timeout: number | null = null
 
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number) {
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number, public leading: boolean) {
     super(fn, observable)
   }
 
@@ -124,7 +128,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
     }
 
     this.timeout = setTimeout(() => {
-      this.saved_result = this.call(this.last_value!)
+      this.saved_result = super.call(this.last_value!)
     })
 
     return this.saved_result
@@ -132,11 +136,11 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
 
 }
 
-export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options?: ObserverOptions) {
-  if (options && options.debounce)
-    return new DebounceObserver(fn, obs, options.debounce)
-  if (options && options.throttle)
-    return new ThrottleObserver(fn, obs, options.throttle)
+export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
+  if (options.debounce)
+    return new DebounceObserver(fn, obs, options.debounce, !!options.leading)
+  if (options.throttle)
+    return new ThrottleObserver(fn, obs, options.throttle, !!options.leading)
   return new Observer(fn, obs)
 }
 
@@ -196,8 +200,12 @@ export class Observable<T> {
   /**
    * Get a shallow copy of the current value. Used for transforms.
    */
-  getShallowCopy(circular = false): T {
+  getShallowClone(circular = false): T {
     return clone(this.get(), circular, 1)
+  }
+
+  getClone(circular = false): T {
+    return clone(this.get(), circular)
   }
 
   pause() {
@@ -318,7 +326,7 @@ export class Observable<T> {
     var obs = new VirtualObservable(() => {
       return fn.call(this.get())
     }, item => {
-      const arr = this.getShallowCopy()
+      const arr = this.getShallowClone()
       arr[o.get(key)] = item
       this.set(arr)
     })
@@ -352,7 +360,7 @@ export class Observable<T> {
         if (old_transformed && len !== old_transformed.length)
             throw new Error(`filtered arrays may not change size by themselves`)
 
-        var local_array: U[] = this.getShallowCopy()
+        var local_array: U[] = this.getShallowClone()
         for (var i = 0; i < len; i++) {
           local_array[indexes[i]] = transformed_array[i]
         }

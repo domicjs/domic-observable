@@ -1,4 +1,4 @@
-import {Observable, Observer} from '../observable'
+import {Observable, Observer, ObserverOptions} from '../observable'
 
 export function cmp(a: any, b: any) {
   if (a === b) return true
@@ -62,11 +62,11 @@ export class Calls {
 
 var unregs: Observer<any>[] = []
 
-export function spyon<T>(obs: Observable<T>) {
+export function spyon<T>(obs: Observable<T>, options?: ObserverOptions) {
   var spy = new Calls()
   unregs.push(obs.addObserver(function (value, old) {
     spy.call(value, old)
-  }))
+  }, options))
   return spy
 }
 
@@ -75,4 +75,11 @@ export namespace spyon {
     unregs.forEach(u => u.stopObserving())
     unregs = []
   }
+}
+
+
+export function wait(ms: number) {
+  return new Promise<number>((acc, rej) => {
+    setTimeout(() => acc(ms), ms)
+  })
 }

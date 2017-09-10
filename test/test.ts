@@ -8,7 +8,7 @@ import {expect} from 'chai'
 
 import {o} from '../observable'
 
-import {spyon, Calls} from './common'
+import {spyon, Calls, wait} from './common'
 
 beforeEach(() => {
   o_deep = o({a: 1, b: {c: 1}})
@@ -156,5 +156,33 @@ describe('basic operations', () => {
 
     // can't set a filtered array with a different length !
     expect(() => { o_f.set([1, 2]) }).to.throw
+  })
+
+  it('debounce', async function () {
+    const s = spyon(o_simple, {debounce: 5})
+    o_simple.set(1)
+    o_simple.set(2)
+    o_simple.set(3)
+    await wait(6)
+    s.was.called.once.with(3, 0)
+    o_simple.set(2)
+    o_simple.set(1)
+    o_simple.set(-1)
+    await wait(6)
+    s.was.called.once.with(-1, 3)
+  })
+
+  it.only('throttle', async function () {
+    const s = spyon(o_simple, {throttle: 10})
+    o_simple.set(1)
+    o_simple.set(2)
+    o_simple.set(3)
+    s.was.called.once.with(1, 0)
+    await wait(15)
+    s.was.called.once.with(3, 1)
+    o_simple.set(2)
+    o_simple.set(1)
+    await wait(10)
+    s.was.called.once.with(1, 3)
   })
 })
