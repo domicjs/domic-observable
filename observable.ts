@@ -263,7 +263,9 @@ export class Observable<T> {
   /**
    * Add an observer.
    */
-  addObserver(fn: ObserverFunction<T> | Observer<T>): UnregisterFunction {
+  addObserver(obs: Observer<T>): UnregisterFunction
+  addObserver(fn: ObserverFunction<T>, options?: ObserverOptions): UnregisterFunction
+  addObserver(fn: ObserverFunction<T> | Observer<T>, options?: ObserverOptions): UnregisterFunction {
 
     const ob = typeof fn === 'function' ? new Observer(fn) : fn
     ob.old_value = this.get()
