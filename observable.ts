@@ -150,17 +150,20 @@ export function isClonable(v: any): v is Clonable {
  * If the object had a clone() method, it will use it instead.
  *
  * @param value The value to clone
+ * @param deep
  */
-export function clone<A>(value: A): A {
+export function clone<A>(value: A, deep = false): A {
 
   if (isClonable(value))
     return value.clone()
 
   if (value instanceof Array) {
+    // ???
+    if (deep) return value.map(v => clone(v, true)) as any
     return value.slice() as any
   }
 
-  if (value instanceof Object) {
+  if (typeof value === 'object') {
     var descrs: {[name: string]: PropertyDescriptor} = {}
 
     for (var prop of Object.getOwnPropertyNames(value)) {
@@ -168,6 +171,7 @@ export function clone<A>(value: A): A {
       // Skip unconfigurable objects.
       if (!desc.configurable)
         continue
+      if (deep) desc.value = clone(desc.value)
       descrs[prop] = desc
     }
 
@@ -175,14 +179,15 @@ export function clone<A>(value: A): A {
       desc = Object.getOwnPropertyDescriptor(value, sym)
       if (!desc.configurable)
         continue
+      if (deep) desc.value = clone(desc.value)
       descrs[sym] = desc
     }
 
-    var clone = Object.create(
+    var cloned = Object.create(
       value.constructor.prototype,
       descrs
     )
-    return clone
+    return cloned
   }
 
   return value
