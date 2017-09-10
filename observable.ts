@@ -132,6 +132,63 @@ export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B 
 }
 
 
+export interface Clonable {
+  clone(): this
+}
+
+export function isClonable(v: any): v is Clonable {
+  return v instanceof Object && typeof v.constructor.prototype.clone === 'function'
+}
+
+/**
+ * Create a shallow copy of a value.
+ *
+ * This copy will take all its attributes and put them in a new object.
+ * For objects that aren't array, it will try to take to create an object
+ * with the same constructor.
+ *
+ * If the object had a clone() method, it will use it instead.
+ *
+ * @param value The value to clone
+ */
+export function clone<A>(value: A): A {
+
+  if (isClonable(value))
+    return value.clone()
+
+  if (value instanceof Array) {
+    return value.slice() as any
+  }
+
+  if (value instanceof Object) {
+    var descrs: {[name: string]: PropertyDescriptor} = {}
+
+    for (var prop of Object.getOwnPropertyNames(value)) {
+      var desc = Object.getOwnPropertyDescriptor(value, prop)
+      // Skip unconfigurable objects.
+      if (!desc.configurable)
+        continue
+      descrs[prop] = desc
+    }
+
+    for (var sym of Object.getOwnPropertySymbols(value)) {
+      desc = Object.getOwnPropertyDescriptor(value, sym)
+      if (!desc.configurable)
+        continue
+      descrs[sym] = desc
+    }
+
+    var clone = Object.create(
+      value.constructor.prototype,
+      descrs
+    )
+    return clone
+  }
+
+  return value
+}
+
+
 /**
  *
  */
@@ -173,39 +230,7 @@ export class Observable<T> {
    * Get a shallow copy of the current value. Used for transforms.
    */
   getShallowCopy(): T {
-
-    const value = this.get()
-
-    if (value instanceof Array) {
-      return value.slice() as any
-    }
-
-    if (value instanceof Object) {
-      var descrs: {[name: string]: PropertyDescriptor} = {}
-
-      for (var prop of Object.getOwnPropertyNames(value)) {
-        var desc = Object.getOwnPropertyDescriptor(value, prop)
-        // Skip unconfigurable objects.
-        if (!desc.configurable)
-          continue
-        descrs[prop] = desc
-      }
-
-      for (var sym of Object.getOwnPropertySymbols(value)) {
-        desc = Object.getOwnPropertyDescriptor(value, sym)
-        if (!desc.configurable)
-          continue
-        descrs[sym] = desc
-      }
-
-      var clone = Object.create(
-        value.constructor.prototype,
-        descrs
-      )
-      return clone
-    }
-
-    return value
+    return clone(this.get())
   }
 
   pause() {
