@@ -14,10 +14,12 @@
     "dev": "parallel -u ::: 'tscc -w' 'ls *.js | entr mocha -R dot '"
   },
   "dependencies": {
+    "clone": "^2.1.1",
     "tslib": "*"
   },
   "devDependencies": {
     "@types/chai": "^3.4.34",
+    "@types/clone": "^0.1.30",
     "@types/mocha": "^2.2.39",
     "chai": "^3.5.0",
     "mocha": "^3.2.0",

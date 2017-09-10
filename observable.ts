@@ -1,4 +1,6 @@
 
+import * as clone from 'clone'
+
 export type UnregisterFunction = () => void
 
 export type ObserverFunction<T, U = void> = (newval: T, oldval: T) => U
@@ -34,14 +36,14 @@ export class Observer<A, B = void> {
   // saved value exists solely to
   protected last_value: A | undefined
   protected last_result: B
-  protected timeout: number | undefined
+  protected is_paused = false
 
   constructor(public fn: ObserverFunction<A, B>, public observable: Observable<A>) {
 
   }
 
   call(new_value: A): B {
-    if (this.isPaused()) {
+    if (this.is_paused) {
       this.last_value = new_value
       return this.last_result
     }
@@ -52,18 +54,14 @@ export class Observer<A, B = void> {
     return res
   }
 
-  isPaused() {
-    return this.timeout === -1
-  }
-
   pause() {
-    this.timeout = -1
+    this.is_paused = true
   }
 
   resume() {
     const val = this.last_value
     this.last_value = undefined
-    this.timeout = undefined
+    this.is_paused = false
     return this.call(val!)
   }
 
@@ -79,15 +77,32 @@ export class Observer<A, B = void> {
 
 export class ThrottleObserver<A, B> extends Observer<A, B> {
 
-  saved_result: B
+  last_call: number
+  timeout: number | null
 
   constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number) {
     super(fn, observable)
   }
 
   call(new_value: A): B {
-    // FIXME not implemented !
-    return this.saved_result
+    const now = performance.now()
+
+    var result = this.last_result
+    this.last_value = new_value
+
+    if (!this.last_call || this.last_call - now > this.throttle) {
+      result = super.call(new_value)
+    } else {
+      if (!this.timeout) {
+        this.timeout = setTimeout(() => {
+          this.call(this.last_value!)
+          this.timeout = null
+        })
+      }
+    }
+    this.last_call = now
+
+    return result
   }
 
 }
@@ -96,13 +111,22 @@ export class ThrottleObserver<A, B> extends Observer<A, B> {
 export class DebounceObserver<A, B> extends Observer<A, B> {
 
   saved_result: B
+  timeout: number | null = null
 
   constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number) {
-    // FIXME not implemented !
     super(fn, observable)
   }
 
-  call(): B {
+  call(new_value: A): B {
+    this.last_value = new_value
+    if (this.timeout != null) {
+      clearTimeout(this.timeout)
+    }
+
+    this.timeout = setTimeout(() => {
+      this.saved_result = this.call(this.last_value!)
+    })
+
     return this.saved_result
   }
 
@@ -129,68 +153,6 @@ export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B 
     last_result = fn(arg, old)
     return last_result
   }
-}
-
-
-export interface Clonable {
-  clone(): this
-}
-
-export function isClonable(v: any): v is Clonable {
-  return v instanceof Object && typeof v.constructor.prototype.clone === 'function'
-}
-
-/**
- * Create a shallow copy of a value.
- *
- * This copy will take all its attributes and put them in a new object.
- * For objects that aren't array, it will try to take to create an object
- * with the same constructor.
- *
- * If the object had a clone() method, it will use it instead.
- *
- * @param value The value to clone
- * @param deep
- */
-export function clone<A>(value: A, deep = false): A {
-
-  if (isClonable(value))
-    return value.clone()
-
-  if (value instanceof Array) {
-    // ???
-    if (deep) return value.map(v => clone(v, true)) as any
-    return value.slice() as any
-  }
-
-  if (typeof value === 'object') {
-    var descrs: {[name: string]: PropertyDescriptor} = {}
-
-    for (var prop of Object.getOwnPropertyNames(value)) {
-      var desc = Object.getOwnPropertyDescriptor(value, prop)
-      // Skip unconfigurable objects.
-      if (!desc.configurable)
-        continue
-      if (deep) desc.value = clone(desc.value)
-      descrs[prop] = desc
-    }
-
-    for (var sym of Object.getOwnPropertySymbols(value)) {
-      desc = Object.getOwnPropertyDescriptor(value, sym)
-      if (!desc.configurable)
-        continue
-      if (deep) desc.value = clone(desc.value)
-      descrs[sym] = desc
-    }
-
-    var cloned = Object.create(
-      value.constructor.prototype,
-      descrs
-    )
-    return cloned
-  }
-
-  return value
 }
 
 
@@ -234,8 +196,8 @@ export class Observable<T> {
   /**
    * Get a shallow copy of the current value. Used for transforms.
    */
-  getShallowCopy(): T {
-    return clone(this.get())
+  getShallowCopy(circular = false): T {
+    return clone(this.get(), circular, 1)
   }
 
   pause() {

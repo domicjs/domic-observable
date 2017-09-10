@@ -6,7 +6,7 @@ require('source-map-support').install()
 import 'mocha'
 import {expect} from 'chai'
 
-import {o, clone} from '../observable'
+import {o} from '../observable'
 
 import {spyon, Calls} from './common'
 
@@ -156,22 +156,5 @@ describe('basic operations', () => {
 
     // can't set a filtered array with a different length !
     expect(() => { o_f.set([1, 2]) }).to.throw
-  })
-})
-
-describe('cloning', () => {
-  it('simple object', () => {
-    const a = {a: 1, b: 2, c: {d: 1}}
-    const b = clone(a)
-    expect(b).to.not.eq(a)
-    expect(b).to.eql(a)
-  })
-
-  it('deep simple object', () => {
-    const a = {a: 1, b: 2, c: {d: 1}}
-    const b = clone(a, true)
-    expect(b).to.not.eq(a)
-    expect(a.c).to.not.eq(b.c)
-    expect(b).to.eql(a)
   })
 })
