@@ -1,4 +1,4 @@
-import {Observable, UnregisterFunction} from '../observable'
+import {Observable, Observer} from '../observable'
 
 export function cmp(a: any, b: any) {
   if (a === b) return true
@@ -60,7 +60,7 @@ export class Calls {
 
 ////////////////////////////////////////////////////////////////////
 
-var unregs: UnregisterFunction[] = []
+var unregs: Observer<any>[] = []
 
 export function spyon<T>(obs: Observable<T>) {
   var spy = new Calls()
@@ -72,7 +72,7 @@ export function spyon<T>(obs: Observable<T>) {
 
 export namespace spyon {
   export function clean() {
-    unregs.forEach(u => u())
+    unregs.forEach(u => u.stopObserving())
     unregs = []
   }
 }

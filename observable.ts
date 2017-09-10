@@ -28,58 +28,28 @@ export interface ObserverOptions {
 }
 
 
-export class Observer<T, U = void> {
+export class Observer<A, B = void> {
 
-  debounce: number | undefined
-  throttle: number | undefined
+  old_value: A
+  // saved value exists solely to
+  protected last_value: A | undefined
+  protected last_result: B
   protected timeout: number | undefined
 
-  old_value: T
-  // saved value exists solely to
-  protected saved_value: T | undefined
+  constructor(public fn: ObserverFunction<A, B>, public observable: Observable<A>) {
 
-  protected last_result: U
-
-  // used for debounce and throttle
-
-  constructor(public fn: ObserverFunction<T, U>, options?: ObserverOptions) {
-    if (options) {
-      if (options.debounce)
-        this.debounce = options.debounce
-      else if (options.throttle)
-        this.throttle = options.throttle
-    }
   }
 
-  call(new_value: T) {
+  call(new_value: A): B {
     if (this.isPaused()) {
-      this.saved_value = new_value
+      this.last_value = new_value
       return this.last_result
     }
-
-    if (this.debounce || this.throttle) {
-      this.saved_value = new_value
-
-      if (this.debounce && this.timeout)
-        clearTimeout(this.timeout)
-
-      this.timeout = setTimeout(() => {
-        this.docall(this.saved_value!)
-        this.saved_value = undefined as any
-        this.timeout = undefined
-      }, this.debounce || this.throttle)
-
-      return this.last_result
-    } else {
-      this.last_result = this.docall(new_value)!
-      return this.last_result
-    }
-  }
-
-  protected docall(new_value: T): U {
     const old = this.old_value
     this.old_value = new_value
-    return this.fn(new_value, old)
+    const res = this.fn(new_value, old)
+    this.last_result = res
+    return res
   }
 
   isPaused() {
@@ -91,52 +61,59 @@ export class Observer<T, U = void> {
   }
 
   resume() {
-    const val = this.saved_value
-    this.saved_value = undefined
+    const val = this.last_value
+    this.last_value = undefined
     this.timeout = undefined
-    return this.docall(val!)
+    return this.call(val!)
+  }
+
+  startObserving() {
+    this.observable.addObserver(this)
+  }
+
+  stopObserving() {
+    this.observable.removeObserver(this)
   }
 }
 
 
+export class ThrottleObserver<A, B> extends Observer<A, B> {
 
-export function debounce<T extends Function>(fn: T, ms: number): T {
-  var timeout: number|null = null
-  return function (this: any, ...a: any[]) {
-    var self: any = this
-    if (timeout !== null) clearTimeout(timeout)
-    timeout = setTimeout(function () {
-      timeout = null
-      fn.apply(self, a)
-    }, ms)
-  } as any as T
+  saved_result: B
+
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number) {
+    super(fn, observable)
+  }
+
+  call(new_value: A): B {
+    // FIXME not implemented !
+    return this.saved_result
+  }
+
 }
 
 
-export function throttle<T extends Function>(fn: T, ms: number): T {
-  var timeout: number|null = null
-  var last_this: any = null
-  var last_args: any = null
-  var last_call: number | null = null
+export class DebounceObserver<A, B> extends Observer<A, B> {
 
-  return function (this: any, ...a: any[]) {
-    var now = Date.now()
+  saved_result: B
 
-    if (last_call == null || now - last_call >= ms && timeout == null) {
-      last_call = now
-      fn.apply(this, a)
-    } else {
-      last_this = this
-      last_args = a
-      if (timeout != null) return
-      timeout = setTimeout(function () {
-        last_call = Date.now()
-        fn.apply(last_this, last_args)
-        timeout = null
-      }, ms - (now - last_call))
-    }
-  } as any as T
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number) {
+    // FIXME not implemented !
+    super(fn, observable)
+  }
 
+  call(): B {
+    return this.saved_result
+  }
+
+}
+
+export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options?: ObserverOptions) {
+  if (options && options.debounce)
+    return new DebounceObserver(fn, obs, options.debounce)
+  if (options && options.throttle)
+    return new ThrottleObserver(fn, obs, options.throttle)
+  return new Observer(fn, obs)
 }
 
 
@@ -154,8 +131,6 @@ export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B 
   }
 }
 
-export type ObsObject = {observable: Observable<any>, observer: ObserverFunction<any>, unreg?: UnregisterFunction}
-
 
 /**
  *
@@ -163,8 +138,8 @@ export type ObsObject = {observable: Observable<any>, observer: ObserverFunction
 export class Observable<T> {
 
   protected readonly value: T
-  protected observers: Observer<T>[] = []
-  protected observed: ObsObject[] = []
+  protected observers: Observer<T, any>[] = []
+  protected observed: Observer<any, any>[] = []
   protected paused_notify = -1
 
   constructor(value: T) {
@@ -263,29 +238,27 @@ export class Observable<T> {
   /**
    * Add an observer.
    */
-  addObserver(obs: Observer<T>): UnregisterFunction
-  addObserver(fn: ObserverFunction<T>, options?: ObserverOptions): UnregisterFunction
-  addObserver(fn: ObserverFunction<T> | Observer<T>, options?: ObserverOptions): UnregisterFunction {
+  addObserver<U = void>(obs: Observer<T, U>): Observer<T, U>
+  addObserver<U = void>(fn: ObserverFunction<T, U>, options?: ObserverOptions): Observer<T, U>
+  addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>, options?: ObserverOptions): Observer<T, U> {
 
-    const ob = typeof fn === 'function' ? new Observer(fn) : fn
+    const ob = typeof _ob === 'function' ? make_observer(this, _ob, options) : _ob
     ob.old_value = this.get()
     this.observers.push(ob)
 
     // Subscribe to the observables we are meant to subscribe to.
     if (this.observers.length === 1) {
-      this.observed.forEach(obj => {
-        obj.unreg = obj.observable.addObserver(obj.observer)
-      })
+      this.observed.forEach(observer => { observer.startObserving() })
     }
 
-    return this.removeObserver.bind(this, ob) as UnregisterFunction
+    return ob
   }
 
   /**
    *
    * @param ob
    */
-  removeObserver(ob: Observer<T>): void {
+  removeObserver(ob: Observer<T, any>): void {
     this.observers = this.observers.filter(ob => ob !== ob)
 
     if (this.observers.length === 0) {
@@ -293,7 +266,7 @@ export class Observable<T> {
       // ourselves from the observables we were watching to
       // have them lose their reference to us and thus allow
       // us to be garbage collected if needed.
-      this.observed.forEach(o => o.unreg!())
+      this.observed.forEach(o => o.stopObserving())
     }
   }
 
@@ -301,14 +274,18 @@ export class Observable<T> {
    * Observe another observable only when this observer itself
    * is being observed.
    */
-  observe<U>(observable: Observable<U>, observer: ObserverFunction<U>) {
-    const obj = {observable, observer} as ObsObject
-    this.observed.push(obj)
+  observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
+  observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
+  observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
+    const observer = typeof _observer === 'function' ? make_observer(observable, _observer, options) : _observer
+    this.observed.push(observer)
 
     if (this.observers.length > 0) {
-      // start observing immediately if we're already observed
-      obj.unreg = obj.observable.addObserver(obj.observer)
+      // start observing immediately if we're already being observed
+      observer.startObserving()
     }
+
+    return observer
   }
 
   /**
@@ -328,7 +305,7 @@ export class Observable<T> {
   tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): Observable<U>
   tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): Observable<U> {
 
-    const fn = new Observer(memoize(fnget), this.get())
+    const fn = new Observer(memoize(fnget), this)
 
     var obs = new VirtualObservable<U>(() => {
       return fn.call(this.get())
@@ -344,7 +321,7 @@ export class Observable<T> {
   p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
   p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
 
-    const fn = new Observer<any, any>((arr) => arr[o.get(key)])
+    const fn = new Observer<any, any>((arr) => arr[o.get(key)], this)
 
     var obs = new VirtualObservable(() => {
       return fn.call(this.get())
@@ -660,14 +637,15 @@ export namespace o {
 
   }
 
-  export function observe<A>(obs: MaybeObservable<A>, fn: ObserverFunction<A>, call_immediately = true): UnregisterFunction {
+
+  export function observe<A, B = void>(obs: MaybeObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
     if (obs instanceof Observable) {
       return obs.addObserver(fn)
     }
 
     if (call_immediately)
       fn(obs, obs)
-    return function () { }
+    return null
   }
 
 }

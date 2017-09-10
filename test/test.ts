@@ -6,7 +6,7 @@ require('source-map-support').install()
 import 'mocha'
 import {expect} from 'chai'
 
-import {o, Observer} from '../observable'
+import {o} from '../observable'
 
 import {spyon, Calls} from './common'
 
@@ -114,21 +114,21 @@ describe('basic operations', () => {
     simple_spy.was.called.once.with(5, 4)
   })
 
-  it('pausing and unpausing', () => {
+  it('pausing and unpausing observable', () => {
+    const other_simple_spy = spyon(o_simple)
     o_simple.pause()
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
     o_simple.resume()
     simple_spy.was.called.once.with(3, 0)
+    other_simple_spy.was.called.once.with(3, 0)
   })
 
   it('pause and unpause observer', () => {
     const o_a = o(1)
     const spy = new Calls()
-    const obs = new Observer<number>(v => { spy.call(v) })
-
-    o_a.addObserver(obs)
+    const obs = o_a.addObserver(v => spy.call(v))
 
     o_a.set(2)
     spy.was.called.once.with(2)
