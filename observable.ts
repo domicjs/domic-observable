@@ -30,15 +30,13 @@ export interface ObserverOptions {
 
 export class Observer<T, U = void> {
 
-  // observable: Observable<T>
-  // unreg: UnregisterFunction | null = null
-
   debounce: number | undefined
   throttle: number | undefined
+  timeout: number | undefined
+  saved_value: T | undefined
   last_result: U
 
   // used for debounce and throttle
-  timeout: number
 
   constructor(public fn: ObserverFunction<T, U>, public old_value: T, options?: ObserverOptions) {
     if (options) {
@@ -50,12 +48,21 @@ export class Observer<T, U = void> {
   }
 
   call(new_value: T) {
+    if (this.isPaused()) {
+      this.saved_value = new_value
+      return this.last_result
+    }
+
     if (this.debounce || this.throttle) {
+      this.saved_value = new_value
+
       if (this.debounce && this.timeout)
         clearTimeout(this.timeout)
 
       this.timeout = setTimeout(() => {
-        this.docall(new_value)
+        this.docall(this.saved_value!)
+        this.saved_value = undefined as any
+        this.timeout = undefined
       }, this.debounce || this.throttle)
 
       return this.last_result
@@ -71,12 +78,19 @@ export class Observer<T, U = void> {
     return this.fn(new_value, old)
   }
 
-  pause() {
+  isPaused() {
+    return this.timeout === -1
+  }
 
+  pause() {
+    this.timeout = -1
   }
 
   resume() {
-
+    const val = this.saved_value
+    this.saved_value = undefined
+    this.timeout = undefined
+    return this.docall(val!)
   }
 }
 
@@ -235,7 +249,7 @@ export class Observable<T> {
    */
   notify() {
     if (this.paused_notify > -1) {
-      this.paused_notify++
+      this.paused_notify = 1
     } else {
       for (var ob of this.observers)
         ob.call(this.value)
@@ -245,16 +259,10 @@ export class Observable<T> {
   /**
    * Add an observer.
    */
-  addObserver(fn: ObserverFunction<T> | Observer<T>, call_immediately = true): UnregisterFunction {
+  addObserver(fn: ObserverFunction<T> | Observer<T>): UnregisterFunction {
 
     const ob = typeof fn === 'function' ? new Observer(fn, this.get()) : fn
     this.observers.push(ob)
-
-    if (call_immediately) {
-      // First call
-      const obj = this.get()
-      ob.call(obj)
-    }
 
     // Subscribe to the observables we are meant to subscribe to.
     if (this.observers.length === 1) {
@@ -645,12 +653,13 @@ export namespace o {
 
   }
 
-  export function observe<A>(obs: MaybeObservable<A>, fn: ObserverFunction<A>): UnregisterFunction {
+  export function observe<A>(obs: MaybeObservable<A>, fn: ObserverFunction<A>, call_immediately = true): UnregisterFunction {
     if (obs instanceof Observable) {
       return obs.addObserver(fn)
     }
 
-    fn(obs, obs)
+    if (call_immediately)
+      fn(obs, obs)
     return function () { }
   }
 

@@ -6,9 +6,9 @@ require('source-map-support').install()
 import 'mocha'
 import {expect} from 'chai'
 
-import {o} from '../observable'
+import {o, Observer} from '../observable'
 
-import {spyon} from './common'
+import {spyon, Calls} from './common'
 
 beforeEach(() => {
   o_deep = o({a: 1, b: {c: 1}})
@@ -123,6 +123,23 @@ describe('basic operations', () => {
     simple_spy.was.called.once.with(3, 0)
   })
 
+  it('pause and unpause observer', () => {
+    const o_a = o(1)
+    const spy = new Calls()
+    const obs = new Observer(v => { spy.call(v) }, o_a.get())
+
+    o_a.addObserver(obs)
+
+    o_a.set(2)
+    spy.was.called.once.with(2)
+    obs.pause()
+    o_a.set(3)
+    o_a.set(4)
+    o_a.set(5)
+    obs.resume()
+    spy.was.called.once.with(5)
+  })
+
   it('filter', () => {
     const o_arr = o([1, 2, 3, 4])
     const o_f = o_arr.filter(v => v % 2 === 0)
@@ -138,6 +155,6 @@ describe('basic operations', () => {
     expect(o_arr.get()).to.eql([1, 3, 3, 5, 5, 6])
 
     // can't set a filtered array with a different length !
-    expect(() => { o_f.set([1, 2]) }).throws
+    expect(() => { o_f.set([1, 2]) }).to.throw
   })
 })
