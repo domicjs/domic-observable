@@ -32,13 +32,17 @@ export class Observer<T, U = void> {
 
   debounce: number | undefined
   throttle: number | undefined
-  timeout: number | undefined
-  saved_value: T | undefined
-  last_result: U
+  protected timeout: number | undefined
+
+  old_value: T
+  // saved value exists solely to
+  protected saved_value: T | undefined
+
+  protected last_result: U
 
   // used for debounce and throttle
 
-  constructor(public fn: ObserverFunction<T, U>, public old_value: T, options?: ObserverOptions) {
+  constructor(public fn: ObserverFunction<T, U>, options?: ObserverOptions) {
     if (options) {
       if (options.debounce)
         this.debounce = options.debounce
@@ -261,7 +265,8 @@ export class Observable<T> {
    */
   addObserver(fn: ObserverFunction<T> | Observer<T>): UnregisterFunction {
 
-    const ob = typeof fn === 'function' ? new Observer(fn, this.get()) : fn
+    const ob = typeof fn === 'function' ? new Observer(fn) : fn
+    ob.old_value = this.get()
     this.observers.push(ob)
 
     // Subscribe to the observables we are meant to subscribe to.
@@ -337,7 +342,7 @@ export class Observable<T> {
   p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
   p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
 
-    const fn = new Observer((arr) => arr[o.get(key)], this.get())
+    const fn = new Observer<any, any>((arr) => arr[o.get(key)])
 
     var obs = new VirtualObservable(() => {
       return fn.call(this.get())

@@ -126,7 +126,7 @@ describe('basic operations', () => {
   it('pause and unpause observer', () => {
     const o_a = o(1)
     const spy = new Calls()
-    const obs = new Observer(v => { spy.call(v) }, o_a.get())
+    const obs = new Observer<number>(v => { spy.call(v) })
 
     o_a.addObserver(obs)
 
