@@ -506,7 +506,7 @@ export class ReadonlyObservable<T> {
    * @param this
    * @param fn
    */
-  filter<U>(this: ReadonlyObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]> {
+  filtered<U>(this: ReadonlyObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]> {
     return this.tf(
       memoize((arr) => {
         return arr.filter((item, index) => {
@@ -517,13 +517,13 @@ export class ReadonlyObservable<T> {
     )
   }
 
-  map<U, V>(this: ReadonlyObservable<U[]>, fn: (item: U) => V): ReadonlyObservable<V[]> {
+  mapped<U, V>(this: ReadonlyObservable<U[]>, fn: (item: U) => V): ReadonlyObservable<V[]> {
     return this.tf(
       memoize((arr) => arr.map(fn))
     )
   }
 
-  slice<A>(this: ReadonlyObservable<A[]>, start?: MaybeReadonlyObservable<number>, end?: MaybeReadonlyObservable<number>): ReadonlyObservable<A[]> {
+  sliced<A>(this: ReadonlyObservable<A[]>, start?: MaybeReadonlyObservable<number>, end?: MaybeReadonlyObservable<number>): ReadonlyObservable<A[]> {
 
     const res: VirtualReadonlyObservable<A[]> =
       this.tf(memoize((arr) => arr.slice(o.get(start), o.get(end)))) as VirtualReadonlyObservable<A[]>
@@ -606,7 +606,7 @@ export class Observable<T> extends ReadonlyObservable<T> {
    * @param this
    * @param fn
    */
-  filter<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
+  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
     var indexes: number[] = []
     return this.tf(
       memoize((arr) => {
@@ -633,7 +633,7 @@ export class Observable<T> extends ReadonlyObservable<T> {
     )
   }
 
-  slice<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
+  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
     const res: VirtualObservable<A[]> =
       this.tf(
         memoize((arr) => arr.slice(o.get(start), o.get(end))),
@@ -651,6 +651,34 @@ export class Observable<T> extends ReadonlyObservable<T> {
     if (end instanceof ReadonlyObservable)
       res.observe(end, () => res.refresh())
 
+    return res
+  }
+
+  push<A>(this: Observable<A[]>, value: A) {
+    const copy = this.getShallowClone()
+    const res = copy.push(value)
+    this.set(copy)
+    return res
+  }
+
+  pop<A>(this: Observable<A[]>) {
+    const copy = this.getShallowClone()
+    const res = copy.pop()
+    this.set(copy)
+    return res
+  }
+
+  shift<A>(this: Observable<A[]>) {
+    const copy = this.getShallowClone()
+    const res = copy.shift()
+    this.set(copy)
+    return res
+  }
+
+  unshift<A>(this: Observable<A[]>, value: A) {
+    const copy = this.getShallowClone()
+    const res = copy.unshift(value)
+    this.set(copy)
     return res
   }
 

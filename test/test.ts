@@ -142,7 +142,7 @@ describe('basic operations', () => {
 
   it('filter', () => {
     const o_arr = o([1, 2, 3, 4])
-    const o_f = o_arr.filter(v => v % 2 === 0)
+    const o_f = o_arr.filtered(v => v % 2 === 0)
     const spy_f = spyon(o_f)
 
     expect(o_f.get()).to.eql([2, 4])
