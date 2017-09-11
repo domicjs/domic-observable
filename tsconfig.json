@@ -16,6 +16,7 @@
     "files": [
         "./observable.ts",
 	"./test/test.ts"
-    ]
+    ],
+    "exclude": ["node_modules"]
 
 }

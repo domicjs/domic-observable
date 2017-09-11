@@ -146,6 +146,24 @@ export function make_observer<A, B>(obs: ReadonlyObservable<A>, fn: ObserverFunc
 }
 
 
+export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
+  if (typeof assignement !== 'object' || assignement.constructor !== Object)
+    return assignement as any
+
+  if (typeof assignement === 'object') {
+    var cloned = clone(value, true, 1) // shallow clone
+
+    for (var name in assignement) {
+      cloned[name] = assign(cloned[name], assignement[name]!)
+    }
+
+    return cloned
+  } else {
+    return value
+  }
+}
+
+
 export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B {
   var last_value: A
   var last_value_bis: A
@@ -549,15 +567,13 @@ export class Observable<T> extends ReadonlyObservable<T> {
    * @param value
    */
   set(value: T): void {
-    const old_value = this.value;
     (this.value as any) = value
-    if (old_value !== value) this.notify()
+    this.notify()
   }
 
   assign(partial: RecursivePartial<T>): void {
-
+    this.set(assign(this.get(), partial))
   }
-
 
   /**
    *

@@ -185,4 +185,30 @@ describe('basic operations', () => {
     await wait(10)
     s.was.called.once.with(1, 3)
   })
+
+  it('assign', () => {
+    const deep = o_deep.get()
+    o_deep.assign({b: {c: 4}})
+    const deep2 = o_deep.get()
+    expect(deep).to.not.equal(deep2)
+    expect(deep.b).to.not.equal(deep2.b)
+    expect(deep2.a).to.equal(1)
+  })
+
+  it('assign replaces non-pure objects', () => {
+    class Test {
+      prop: number
+      constructor(public test = 1, public test2 = 2) { }
+    }
+
+    var a = {a : 1, b: new Test()}
+    var oa = o(a)
+    oa.assign({b: {prop: 3, test: 3}})
+    const a2 = oa.get()
+    oa.assign({b: new Test()})
+    const a3 = oa.get()
+
+    expect(a2.b.prop).to.equal(3)
+    expect(a3.b.prop).to.be.undefined
+  })
 })
