@@ -4,8 +4,8 @@
   "repository": "https://github.com/domicjs/domic-observable",
   "description": "Observables, domic style.",
   "license": "MIT",
-  "typings": "./observable.d.ts",
-  "main": "./observable.js",
+  "typings": "./lib/observable.d.ts",
+  "main": "./lib/observable.js",
   "scripts": {
     "build": "tsc",
     "prepublish": "npm run build",
