@@ -522,6 +522,20 @@ export class ReadonlyObservable<T> {
       memoize((arr) => arr.map(fn))
     )
   }
+
+  slice<A>(this: ReadonlyObservable<A[]>, start?: MaybeReadonlyObservable<number>, end?: MaybeReadonlyObservable<number>): ReadonlyObservable<A[]> {
+
+    const res: VirtualReadonlyObservable<A[]> =
+      this.tf(memoize((arr) => arr.slice(o.get(start), o.get(end)))) as VirtualReadonlyObservable<A[]>
+
+    if (start instanceof ReadonlyObservable)
+      res.observe(start, () => res.refresh())
+
+    if (end instanceof ReadonlyObservable)
+      res.observe(end, () => res.refresh())
+
+    return res
+  }
 }
 
 
@@ -617,6 +631,27 @@ export class Observable<T> extends ReadonlyObservable<T> {
         return transformed_array
       }
     )
+  }
+
+  slice<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
+    const res: VirtualObservable<A[]> =
+      this.tf(
+        memoize((arr) => arr.slice(o.get(start), o.get(end))),
+        (new_arr, old_arr) => {
+          const val = this.getShallowClone()
+          const _end = o.get(end)
+          val.splice(o.get(start) || 0, _end ? _end - (o.get(start) || 0) : old_arr.length, ...new_arr)
+          this.set(val)
+        }
+      ) as VirtualObservable<A[]>
+
+    if (start instanceof ReadonlyObservable)
+      res.observe(start, () => res.refresh())
+
+    if (end instanceof ReadonlyObservable)
+      res.observe(end, () => res.refresh())
+
+    return res
   }
 
   /**
@@ -738,6 +773,8 @@ function isReadonlyObservableObject<T>(obj: any): obj is MaybeReadonlyObservable
 
 export namespace o {
 
+  export function get<A>(arg: MaybeReadonlyObservable<A>): A
+  export function get<A>(arg?: undefined | MaybeReadonlyObservable<A>): A | undefined
   export function get<A>(arg: MaybeReadonlyObservable<A>): A {
     return arg instanceof Observable ? arg.get() : arg
   }
