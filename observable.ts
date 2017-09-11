@@ -5,7 +5,6 @@ export type UnregisterFunction = () => void
 
 export type ObserverFunction<T, U = void> = (newval: T, oldval: T) => U
 
-export type MaybeWritableObservable<T> = T | WritableObservable<T>
 export type MaybeObservable<T> = T | Observable<T>
 
 export type RecursivePartial<T> = {
@@ -189,6 +188,24 @@ export class Observable<T> {
     this.value = value
   }
 
+  stopObservers() {
+    for (var observer of this.observers) {
+      observer.stopObserving()
+    }
+    for (observer of this.observed) {
+      observer.stopObserving()
+    }
+  }
+
+  startObservers() {
+    for (var observer of this.observers) {
+      observer.startObserving()
+    }
+    for (observer of this.observed) {
+      observer.startObserving()
+    }
+  }
+
   /**
    * Return the underlying value of this Observable
    *
@@ -207,6 +224,19 @@ export class Observable<T> {
 
   getClone(circular = false): T {
     return clone(this.get(), circular)
+  }
+
+  /**
+   *
+   * @param value
+   */
+  set(value: T): void {
+    (this.value as any) = value
+    this.notify()
+  }
+
+  assign(partial: RecursivePartial<T>): void {
+    this.set(assign(this.get(), partial))
   }
 
   pause() {
@@ -288,15 +318,6 @@ export class Observable<T> {
 
     return observer
   }
-
-  /**
-   * Use this only to tell typescript's typing system that the new
-   * variable should not be used to perform transforms on this observable
-   */
-  readonly(): Observable<T> {
-    return new VirtualObservable(() => this.get())
-  }
-
 
   //////////////////////////////////////////////////////////////
   /////////// The following are methods that provide
@@ -410,7 +431,7 @@ export class Observable<T> {
    * true when this.get() is === false
    * @tag transform-readonly
    */
-  isFalse(this: WritableObservable<boolean>): Observable<boolean> {
+  isFalse(this: Observable<boolean>): Observable<boolean> {
     return this.tf(val => val as any === false)
   }
 
@@ -418,7 +439,7 @@ export class Observable<T> {
    * true when this.get() === true
    * @tag transform-readonly
    */
-  isTrue(this: WritableObservable<boolean>): Observable<boolean> {
+  isTrue(this: Observable<boolean>): Observable<boolean> {
     return this.tf(val => val as any === true)
   }
 
@@ -443,7 +464,7 @@ export class Observable<T> {
    * any of the provided observables is true.
    * @tag transform-readonly
    */
-  or(...args : MaybeWritableObservable<any>[]) : Observable<boolean> {
+  or(...args : MaybeObservable<any>[]) : Observable<boolean> {
     return args.reduce((acc, arg) => arg.or(acc), this)
   }
 
@@ -451,35 +472,35 @@ export class Observable<T> {
    * True when this and all the values provided in args are true.
    * @tag transform-readonly
    */
-  and(...args: MaybeWritableObservable<any>[]) : Observable<boolean> {
+  and(...args: MaybeObservable<any>[]) : Observable<boolean> {
     return args.reduce((acc, arg) => arg.and(acc), this)
   }
 
   /**
    * @tag transform-readonly
    */
-  plus(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
+  plus(this: Observable<number>, pl: Observable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs + rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  minus(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
+  minus(this: Observable<number>, pl: Observable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs - rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  times(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
+  times(this: Observable<number>, pl: Observable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs * rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  dividedBy(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
+  dividedBy(this: Observable<number>, pl: Observable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs / rhs)
   }
 
@@ -488,13 +509,15 @@ export class Observable<T> {
    * @param fnget
    * @param fnset
    */
-  tf<U>(fnget: ObserverFunction<T, U>): Observable<U> {
+  tf<U>(fnget: ObserverFunction<T, U>): Observable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): Observable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): Observable<U> {
 
     const fn = new Observer(memoize(fnget), this)
 
     var obs = new VirtualObservable<U>(() => {
       return fn.call(this.get())
-    })
+    }, fnset)
 
     obs.observe(this, () => obs.refresh())
 
@@ -510,10 +533,14 @@ export class Observable<T> {
 
     var obs = new VirtualObservable(() => {
       return fn.call(this.get())
+    }, item => {
+      const arr = this.getShallowClone()
+      arr[o.get(key)] = item
+      this.set(arr)
     })
 
     obs.observe(this, () => obs.refresh())
-    if (key instanceof WritableObservable)
+    if (key instanceof Observable)
       obs.observe(key, () => obs.refresh())
 
     return obs
@@ -525,104 +552,6 @@ export class Observable<T> {
    * @param fn
    */
   filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
-    return this.tf(
-      memoize((arr) => {
-        return arr.filter((item, index) => {
-          var res = fn(item, index, arr)
-          return res
-        })
-      })
-    )
-  }
-
-  mapped<U, V>(this: Observable<U[]>, fn: (item: U) => V): Observable<V[]> {
-    return this.tf(
-      memoize((arr) => arr.map(fn))
-    )
-  }
-
-  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
-
-    const res: VirtualObservable<A[]> =
-      this.tf(memoize((arr) => arr.slice(o.get(start), o.get(end)))) as VirtualObservable<A[]>
-
-    if (start instanceof Observable)
-      res.observe(start, () => res.refresh())
-
-    if (end instanceof Observable)
-      res.observe(end, () => res.refresh())
-
-    return res
-  }
-}
-
-
-/**
- *
- */
-export class WritableObservable<T> extends Observable<T> {
-
-  /**
-   *
-   * @param value
-   */
-  set(value: T): void {
-    (this.value as any) = value
-    this.notify()
-  }
-
-  assign(partial: RecursivePartial<T>): void {
-    this.set(assign(this.get(), partial))
-  }
-
-  /**
-   *
-   * @param fnget
-   * @param fnset
-   */
-  tf<U>(fnget: ObserverFunction<T, U>): Observable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): WritableObservable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): WritableObservable<U> {
-
-    const fn = new Observer(memoize(fnget), this)
-
-    var obs = new VirtualWritableObservable<U>(() => {
-      return fn.call(this.get())
-    }, fnset)
-
-    obs.observe(this, () => obs.refresh())
-
-    return obs
-  }
-
-  p<U extends object, K extends keyof U>(this: WritableObservable<U>, key: K): WritableObservable<U[K]>
-  p<U>(this: WritableObservable<{[key: string]: U}>, key: MaybeWritableObservable<string>): WritableObservable<U | undefined>
-  p<U>(this: WritableObservable<U[]>, key: MaybeWritableObservable<number>): WritableObservable<U | undefined>
-  p(this: WritableObservable<any>, key: MaybeWritableObservable<number|string>): WritableObservable<any> {
-
-    const fn = new Observer<any, any>((arr) => arr[o.get(key)], this)
-
-    var obs = new VirtualWritableObservable(() => {
-      return fn.call(this.get())
-    }, item => {
-      const arr = this.getShallowClone()
-      arr[o.get(key)] = item
-      this.set(arr)
-    })
-
-    obs.observe(this, () => obs.refresh())
-    if (key instanceof WritableObservable)
-      obs.observe(key, () => obs.refresh())
-
-    return obs
-  }
-
-  /**
-   *
-   * @param this
-   * @param fn
-   */
-  filtered<U>(this: WritableObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): WritableObservable<U[]> {
     var indexes: number[] = []
     return this.tf(
       memoize((arr) => {
@@ -649,8 +578,8 @@ export class WritableObservable<T> extends Observable<T> {
     )
   }
 
-  sliced<A>(this: WritableObservable<A[]>, start?: MaybeWritableObservable<number>, end?: MaybeWritableObservable<number>): WritableObservable<A[]> {
-    const res: VirtualWritableObservable<A[]> =
+  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
+    const res: VirtualObservable<A[]> =
       this.tf(
         memoize((arr) => arr.slice(o.get(start), o.get(end))),
         (new_arr, old_arr) => {
@@ -659,7 +588,7 @@ export class WritableObservable<T> extends Observable<T> {
           val.splice(o.get(start) || 0, _end ? _end - (o.get(start) || 0) : old_arr.length, ...new_arr)
           this.set(val)
         }
-      ) as VirtualWritableObservable<A[]>
+      ) as VirtualObservable<A[]>
 
     if (start instanceof Observable)
       res.observe(start, () => res.refresh())
@@ -670,28 +599,28 @@ export class WritableObservable<T> extends Observable<T> {
     return res
   }
 
-  push<A>(this: WritableObservable<A[]>, value: A) {
+  push<A>(this: Observable<A[]>, value: A) {
     const copy = this.getShallowClone()
     const res = copy.push(value)
     this.set(copy)
     return res
   }
 
-  pop<A>(this: WritableObservable<A[]>) {
+  pop<A>(this: Observable<A[]>) {
     const copy = this.getShallowClone()
     const res = copy.pop()
     this.set(copy)
     return res
   }
 
-  shift<A>(this: WritableObservable<A[]>) {
+  shift<A>(this: Observable<A[]>) {
     const copy = this.getShallowClone()
     const res = copy.shift()
     this.set(copy)
     return res
   }
 
-  unshift<A>(this: WritableObservable<A[]>, value: A) {
+  unshift<A>(this: Observable<A[]>, value: A) {
     const copy = this.getShallowClone()
     const res = copy.unshift(value)
     this.set(copy)
@@ -704,31 +633,31 @@ export class WritableObservable<T> extends Observable<T> {
    * Will trigger a compilation error if used with something else than
    * a boolean Observable.
    */
-  toggle(this: WritableObservable<boolean>) {
+  toggle(this: Observable<boolean>) {
     this.set(!this.get())
   }
 
-  add(this: WritableObservable<number>, inc: number) {
+  add(this: Observable<number>, inc: number) {
     this.set(this.get() + inc)
     return this
   }
 
-  sub(this: WritableObservable<number>, dec: number) {
+  sub(this: Observable<number>, dec: number) {
     this.set(this.get() - dec)
     return this
   }
 
-  mul(this: WritableObservable<number>, coef: number) {
+  mul(this: Observable<number>, coef: number) {
     this.set(this.get() * coef)
     return this
   }
 
-  div(this: WritableObservable<number>, coef: number) {
+  div(this: Observable<number>, coef: number) {
     this.set(this.get() / coef)
     return this
   }
 
-  mod(this: WritableObservable<number>, m: number) {
+  mod(this: Observable<number>, m: number) {
     this.set(this.get() % m)
     return this
   }
@@ -736,33 +665,11 @@ export class WritableObservable<T> extends Observable<T> {
 }
 
 
-export class VirtualObservable<T> extends Observable<T> {
-  constructor(
-    protected fnget: () => T
-  ) {
-    super(undefined!)
-  }
-
-  refresh() {
-    const val = this.fnget()
-    const old = this.value;
-    (this.value as any) = val
-    if (old !== val) this.notify()
-  }
-
-  get(): T {
-    if (this.observers.length === 0)
-      this.refresh()
-    return this.value
-  }
-
-}
-
 /**
  * An observable that does not its own value, but that depends
  * from outside getters and setters.
  */
-export class VirtualWritableObservable<T> extends WritableObservable<T> {
+export class VirtualObservable<T> extends Observable<T> {
 
   constructor(
     protected fnget: () => T,
@@ -787,6 +694,9 @@ export class VirtualWritableObservable<T> extends WritableObservable<T> {
   set(value: T): void {
     // Missing a way of not recursing infinitely.
     const old_value = this.value;
+    if (!this.fnset) {
+      console.warn('attempted to set a value to a readonly observable')
+    }
     this.fnset!(value, old_value)
   }
 
@@ -799,20 +709,13 @@ export class VirtualWritableObservable<T> extends WritableObservable<T> {
  *
  * @param arg
  */
-export function o<T>(arg: MaybeWritableObservable<T>): WritableObservable<T> {
-  return arg instanceof WritableObservable ? arg : new WritableObservable(arg)
+export function o<T>(arg: MaybeObservable<T>): Observable<T>
+export function o<T>(arg: MaybeObservable<T>): Observable<T> {
+  return arg instanceof Observable ? arg : new Observable(arg)
 }
 
 
-export type MaybeWritableObservableObject<T> = { [P in keyof T]:  MaybeWritableObservable<T[P]>}
 export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
-
-function isReadonlyObservableObject<T>(obj: any): obj is MaybeObservable<T> {
-  for (var x in obj)
-    if (obj[x] instanceof WritableObservable)
-      return false
-  return true
-}
 
 
 export namespace o {
@@ -820,7 +723,7 @@ export namespace o {
   export function get<A>(arg: MaybeObservable<A>): A
   export function get<A>(arg?: undefined | MaybeObservable<A>): A | undefined
   export function get<A>(arg: MaybeObservable<A>): A {
-    return arg instanceof WritableObservable ? arg.get() : arg
+    return arg instanceof Observable ? arg.get() : arg
   }
 
   export function and(...args: Observable<any>[]): Observable<boolean> {
@@ -840,9 +743,8 @@ export namespace o {
   }
 
 
-  export function merge<A extends object>(obj: MaybeWritableObservableObject<A>): WritableObservable<A>
   export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A>
-  export function merge<A extends object>(obj: MaybeWritableObservableObject<A> | MaybeObservableObject<A>): WritableObservable<A> | Observable<A> {
+  export function merge<A extends object>(obj: MaybeObservableObject<A> | MaybeObservableObject<A>): Observable<A> | Observable<A> {
     const ro_obj = obj as MaybeObservableObject<A>
 
     function _get(): A {
@@ -856,22 +758,17 @@ export namespace o {
     }
 
     function _set(_obj: A): A {
-      const _ob = obj as MaybeWritableObservableObject<A>
+      const _ob = obj as MaybeObservableObject<A>
       for (var name in _obj) {
         var ob = _ob[name]
-        if (ob instanceof WritableObservable) {
+        if (ob instanceof Observable) {
           ob.set(_obj[name])
         }
       }
       return _obj
     }
 
-    var res: VirtualObservable<A> | VirtualWritableObservable<A>
-    if (isReadonlyObservableObject(obj)) {
-      res = new VirtualObservable(_get)
-    } else {
-      res = new VirtualWritableObservable(_get, _set)
-    }
+    var res = new VirtualObservable(_get, _set)
 
     for (var name in ro_obj) {
       var ob = ro_obj[name]
@@ -886,7 +783,7 @@ export namespace o {
 
 
   export function observe<A, B = void>(obs: MaybeObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
-    if (obs instanceof WritableObservable) {
+    if (obs instanceof Observable) {
       return obs.addObserver(fn)
     }
 
