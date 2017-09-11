@@ -172,7 +172,7 @@ describe('basic operations', () => {
     s.was.called.once.with(-1, 3)
   })
 
-  it.only('throttle', async function () {
+  it('throttle', async function () {
     const s = spyon(o_simple, {throttle: 10})
     o_simple.set(1)
     o_simple.set(2)

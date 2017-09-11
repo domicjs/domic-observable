@@ -6,6 +6,7 @@ export type UnregisterFunction = () => void
 export type ObserverFunction<T, U = void> = (newval: T, oldval: T) => U
 
 export type MaybeObservable<T> = T | Observable<T>
+export type MaybeReadonlyObservable<T> = T | ReadonlyObservable<T>
 
 export type RecursivePartial<T> = {
   [P in keyof T]?: RecursivePartial<T[P]>;
@@ -40,7 +41,7 @@ export class Observer<A, B = void> {
   protected last_result: B
   protected is_paused = false
 
-  constructor(public fn: ObserverFunction<A, B>, public observable: Observable<A>) {
+  constructor(public fn: ObserverFunction<A, B>, public observable: ReadonlyObservable<A>) {
 
   }
 
@@ -82,7 +83,7 @@ export class ThrottleObserver<A, B> extends Observer<A, B> {
   last_call: number
   timeout: number | null
 
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number, public leading: boolean) {
+  constructor(fn: ObserverFunction<A, B>, observable: ReadonlyObservable<A>, public throttle: number, public leading: boolean) {
     super(fn, observable)
   }
 
@@ -117,7 +118,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
   saved_result: B
   timeout: number | null = null
 
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number, public leading: boolean) {
+  constructor(fn: ObserverFunction<A, B>, observable: ReadonlyObservable<A>, public debounce: number, public leading: boolean) {
     super(fn, observable)
   }
 
@@ -136,7 +137,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
 
 }
 
-export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
+export function make_observer<A, B>(obs: ReadonlyObservable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
   if (options.debounce)
     return new DebounceObserver(fn, obs, options.debounce, !!options.leading)
   if (options.throttle)
@@ -160,17 +161,13 @@ export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B 
 }
 
 
-/**
- *
- */
-export class Observable<T> {
-
-  protected readonly value: T
+export class ReadonlyObservable<T> {
   protected observers: Observer<T, any>[] = []
   protected observed: Observer<any, any>[] = []
   protected paused_notify = -1
 
-  constructor(value: T) {
+  // protected readonly value: T
+  constructor(protected readonly value: T) {
     this.value = value
   }
 
@@ -181,20 +178,6 @@ export class Observable<T> {
    */
   get(): T {
     return this.value
-  }
-
-  /**
-   *
-   * @param value
-   */
-  set(value: T): void {
-    const old_value = this.value;
-    (this.value as any) = value
-    if (old_value !== value) this.notify()
-  }
-
-  assign(partial: RecursivePartial<T>): void {
-
   }
 
   /**
@@ -274,9 +257,9 @@ export class Observable<T> {
    * Observe another observable only when this observer itself
    * is being observed.
    */
-  observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
-  observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
-  observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
+  observe<U, V = void>(observable: ReadonlyObservable<U>, observer: Observer<U, V>): Observer<U, V>
+  observe<U, V = void>(observable: ReadonlyObservable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
+  observe<U, V = void>(observable: ReadonlyObservable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
     const observer = typeof _observer === 'function' ? make_observer(observable, _observer, options) : _observer
     this.observed.push(observer)
 
@@ -293,8 +276,274 @@ export class Observable<T> {
    * variable should not be used to perform transforms on this observable
    */
   readonly(): ReadonlyObservable<T> {
-    return this as any
+    return new VirtualReadonlyObservable(() => this.get())
   }
+
+
+  //////////////////////////////////////////////////////////////
+  /////////// The following are methods that provide
+
+  /**
+   * true when this.get() > value
+   * @tag transform-readonly
+   */
+  gt(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
+  }
+
+  greaterThan(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.gt(value)
+  }
+
+  /**
+   * true when this.get() < value
+   * @tag transform-readonly
+   */
+  lt(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
+  }
+
+  lesserThan(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.lt(value)
+  }
+
+  /**
+   * true when this.get() === value
+   * @tag transform-readonly
+   */
+  eq(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
+  }
+
+  equal(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.eq(value)
+  }
+
+
+  /**
+   * true when this.get() !== value
+   * @tag transform-readonly
+   */
+  ne(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
+  }
+
+  notEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.ne(value)
+  }
+
+  /**
+   * true when this.get() >= value
+   * @tag transform-readonly
+   */
+  gte(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
+  }
+
+  greaterOrEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.gte(value)
+  }
+
+  /**
+   * true when this.get() <= value
+   * @tag transform-readonly
+   */
+  lte(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
+  }
+
+  lesserOrEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+    return this.lte(value)
+  }
+
+  /**
+   * true when this.get() is null or undefined
+   * @tag transform-readonly
+   */
+  isNull(): ReadonlyObservable<boolean> {
+    return this.tf(val => val == null)
+  }
+
+  /**
+   * true when this.get() is neither null nor undefined
+   * @tag transform-readonly
+   */
+  isNotNull(): ReadonlyObservable<boolean> {
+    return this.tf(val => val != null)
+  }
+
+  /**
+   * true when this.get() is strictly undefined
+   * @tag transform-readonly
+   */
+  isUndefined(): ReadonlyObservable<boolean> {
+    return this.tf(val => val === undefined)
+  }
+
+  /**
+   * true when this.get() is strictly not undefined
+   * @tag transform-readonly
+   */
+  isDefined(): ReadonlyObservable<boolean> {
+    return this.tf(val => val !== undefined)
+  }
+
+  /**
+   * true when this.get() is === false
+   * @tag transform-readonly
+   */
+  isFalse(this: Observable<boolean>): ReadonlyObservable<boolean> {
+    return this.tf(val => val as any === false)
+  }
+
+  /**
+   * true when this.get() === true
+   * @tag transform-readonly
+   */
+  isTrue(this: Observable<boolean>): ReadonlyObservable<boolean> {
+    return this.tf(val => val as any === true)
+  }
+
+  /**
+   * true when this.get() would be false in an if condition
+   * @tag transform-readonly
+   */
+  isFalsy(): ReadonlyObservable<boolean> {
+    return this.tf(val => !val)
+  }
+
+  /**
+   * true when this.get() would be true in an if condition
+   * @tag transform-readonly
+   */
+  isTruthy(): ReadonlyObservable<boolean> {
+    return this.tf(val => !!val)
+  }
+
+  /**
+   * Set up an observable that is true when this observable or
+   * any of the provided observables is true.
+   * @tag transform-readonly
+   */
+  or(...args : MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
+    return args.reduce((acc, arg) => arg.or(acc), this)
+  }
+
+  /**
+   * True when this and all the values provided in args are true.
+   * @tag transform-readonly
+   */
+  and(...args: MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
+    return args.reduce((acc, arg) => arg.and(acc), this)
+  }
+
+  /**
+   * @tag transform-readonly
+   */
+  plus(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs + rhs)
+  }
+
+  /**
+   * @tag transform-readonly
+   */
+  minus(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs - rhs)
+  }
+
+  /**
+   * @tag transform-readonly
+   */
+  times(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs * rhs)
+  }
+
+  /**
+   * @tag transform-readonly
+   */
+  dividedBy(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+    return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs / rhs)
+  }
+
+  /**
+   *
+   * @param fnget
+   * @param fnset
+   */
+  tf<U>(fnget: ObserverFunction<T, U>): ReadonlyObservable<U> {
+
+    const fn = new Observer(memoize(fnget), this)
+
+    var obs = new VirtualReadonlyObservable<U>(() => {
+      return fn.call(this.get())
+    })
+
+    obs.observe(this, () => obs.refresh())
+
+    return obs
+  }
+
+  p<U extends object, K extends keyof U>(this: ReadonlyObservable<U>, key: K): ReadonlyObservable<U[K]>
+  p<U>(this: ReadonlyObservable<{[key: string]: U}>, key: MaybeReadonlyObservable<string>): ReadonlyObservable<U | undefined>
+  p<U>(this: ReadonlyObservable<U[]>, key: MaybeReadonlyObservable<number>): ReadonlyObservable<U | undefined>
+  p(this: ReadonlyObservable<any>, key: MaybeReadonlyObservable<number|string>): ReadonlyObservable<any> {
+
+    const fn = new Observer<any, any>((arr) => arr[o.get(key)], this)
+
+    var obs = new VirtualReadonlyObservable(() => {
+      return fn.call(this.get())
+    })
+
+    obs.observe(this, () => obs.refresh())
+    if (key instanceof Observable)
+      obs.observe(key, () => obs.refresh())
+
+    return obs
+  }
+
+  /**
+   *
+   * @param this
+   * @param fn
+   */
+  filter<U>(this: ReadonlyObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]> {
+    return this.tf(
+      memoize((arr) => {
+        return arr.filter((item, index) => {
+          var res = fn(item, index, arr)
+          return res
+        })
+      })
+    )
+  }
+
+  map<U, V>(this: ReadonlyObservable<U[]>, fn: (item: U) => V): ReadonlyObservable<V[]> {
+    return this.tf(
+      memoize((arr) => arr.map(fn))
+    )
+  }
+}
+
+
+/**
+ *
+ */
+export class Observable<T> extends ReadonlyObservable<T> {
+
+  /**
+   *
+   * @param value
+   */
+  set(value: T): void {
+    const old_value = this.value;
+    (this.value as any) = value
+    if (old_value !== value) this.notify()
+  }
+
+  assign(partial: RecursivePartial<T>): void {
+
+  }
+
 
   /**
    *
@@ -370,149 +619,65 @@ export class Observable<T> {
     )
   }
 
-  //////////////////////////////////////////////////////////////
-  /////////// The following are methods that provide
-
   /**
-   * true when this._value > value
+   * Set the value of this observable to "not" its value.
+   *
+   * Will trigger a compilation error if used with something else than
+   * a boolean Observable.
    */
-  gt(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
+  toggle(this: Observable<boolean>) {
+    this.set(!this.get())
   }
 
-  greaterThan(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.gt(value)
+  add(this: Observable<number>, inc: number) {
+    this.set(this.get() + inc)
+    return this
   }
 
-  /**
-   * true when this._value < value
-   */
-  lt(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
+  sub(this: Observable<number>, dec: number) {
+    this.set(this.get() - dec)
+    return this
   }
 
-  lesserThan(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.lt(value)
+  mul(this: Observable<number>, coef: number) {
+    this.set(this.get() * coef)
+    return this
   }
 
-  /**
-   * true when this._value === value
-   */
-  eq(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
+  div(this: Observable<number>, coef: number) {
+    this.set(this.get() / coef)
+    return this
   }
 
-  equal(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.eq(value)
-  }
-
-
-  /**
-   * true when this._value !== value
-   */
-  ne(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
-  }
-
-  notEqual(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.ne(value)
-  }
-
-  /**
-   * true when this._value >= value
-   */
-  gte(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
-  }
-
-  greaterOrEqual(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.gte(value)
-  }
-
-  /**
-   * true when this._value <= value
-   */
-  lte(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
-  }
-
-  lesserOrEqual(value: MaybeObservable<T>): ReadonlyObservable<boolean> {
-    return this.lte(value)
-  }
-
-  /**
-   * true when this._value is null or undefined
-   */
-  isNull(): ReadonlyObservable<boolean> {
-    return this.tf(val => val == null)
-  }
-
-  /**
-   * true when this._value is neither null nor undefined
-   */
-  isNotNull(): ReadonlyObservable<boolean> {
-    return this.tf(val => val != null)
-  }
-
-  /**
-   * true when this._value is strictly undefined
-   */
-  isUndefined(): ReadonlyObservable<boolean> {
-    return this.tf(val => val === undefined)
-  }
-
-  /**
-   * true when this._value is strictly not undefined
-   */
-  isDefined(): ReadonlyObservable<boolean> {
-    return this.tf(val => val !== undefined)
-  }
-
-  /**
-   * true when this._value is === false
-   */
-  isFalse(this: Observable<boolean>): ReadonlyObservable<boolean> {
-    return this.tf(val => val as any === false)
-  }
-
-  /**
-   * true when this._value === true
-   */
-  isTrue(this: Observable<boolean>): ReadonlyObservable<boolean> {
-    return this.tf(val => val as any === true)
-  }
-
-  /**
-   * true when this._value would be false in an if condition
-   */
-  isFalsy(): ReadonlyObservable<boolean> {
-    return this.tf(val => !val)
-  }
-
-  /**
-   * true when this._value would be true in an if condition
-   */
-  isTruthy(): ReadonlyObservable<boolean> {
-    return this.tf(val => !!val)
-  }
-
-  /**
-   * Set up an observable that is true when this observable or
-   * any of the provided observables is true.
-   */
-  or(...args : MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
-    return args.reduce((acc, arg) => arg.or(acc), this)
-  }
-
-  /**
-   * True when this and all the values provided in args are true.
-   */
-  and(...args: MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
-    return args.reduce((acc, arg) => arg.and(acc), this)
+  mod(this: Observable<number>, m: number) {
+    this.set(this.get() % m)
+    return this
   }
 
 }
 
+
+export class VirtualReadonlyObservable<T> extends ReadonlyObservable<T> {
+  constructor(
+    protected fnget: () => T
+  ) {
+    super(undefined!)
+  }
+
+  refresh() {
+    const val = this.fnget()
+    const old = this.value;
+    (this.value as any) = val
+    if (old !== val) this.notify()
+  }
+
+  get(): T {
+    if (this.observers.length === 0)
+      this.refresh()
+    return this.value
+  }
+
+}
 
 /**
  * An observable that does not its own value, but that depends
@@ -549,23 +714,6 @@ export class VirtualObservable<T> extends Observable<T> {
 }
 
 
-/**
- * An Observable that cannot be set in any way.
- */
-export interface ReadonlyObservable<A> extends Observable<A> {
-
-  set(a: never): never
-
-  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): ReadonlyObservable<U[K]>
-  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): ReadonlyObservable<U>
-  p<U>(this: Observable<U[]>, key: number): ReadonlyObservable<U>
-
-  filter<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]>
-
-  add: void
-  substract: void
-  toggle: void
-}
 
 
 /**
@@ -578,15 +726,23 @@ export function o<T>(arg: MaybeObservable<T>): Observable<T> {
 
 
 export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
+export type MaybeReadonlyObservableObject<T> = { [P in keyof T]:  MaybeReadonlyObservable<T[P]>}
+
+function isReadonlyObservableObject<T>(obj: any): obj is MaybeReadonlyObservable<T> {
+  for (var x in obj)
+    if (obj[x] instanceof Observable)
+      return false
+  return true
+}
 
 
 export namespace o {
 
-  export function get<A>(arg: MaybeObservable<A>): A {
+  export function get<A>(arg: MaybeReadonlyObservable<A>): A {
     return arg instanceof Observable ? arg.get() : arg
   }
 
-  export function and(...args: Observable<any>[]): Observable<boolean> {
+  export function and(...args: ReadonlyObservable<any>[]): ReadonlyObservable<boolean> {
     if (args.length === 1)
       return args[0].isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
@@ -594,7 +750,7 @@ export namespace o {
     , args[0])
   }
 
-  export function or(...args: Observable<any>[]): Observable<boolean> {
+  export function or(...args: ReadonlyObservable<any>[]): ReadonlyObservable<boolean> {
     if (args.length === 1)
       return args[0].isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
@@ -602,21 +758,26 @@ export namespace o {
     , args[0])
   }
 
-  export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A> {
+
+  export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A>
+  export function merge<A extends object>(obj: MaybeReadonlyObservableObject<A>): ReadonlyObservable<A>
+  export function merge<A extends object>(obj: MaybeObservableObject<A> | MaybeReadonlyObservableObject<A>): Observable<A> | ReadonlyObservable<A> {
+    const ro_obj = obj as MaybeReadonlyObservableObject<A>
 
     function _get(): A {
       const res = {} as A
 
-      for (var name in obj) {
-        res[name] = o.get(obj[name])
+      for (var name in ro_obj) {
+        res[name] = o.get(ro_obj[name])
       }
 
       return res
     }
 
     function _set(_obj: A): A {
+      const _ob = obj as MaybeObservableObject<A>
       for (var name in _obj) {
-        var ob = obj[name]
+        var ob = _ob[name]
         if (ob instanceof Observable) {
           ob.set(_obj[name])
         }
@@ -624,11 +785,16 @@ export namespace o {
       return _obj
     }
 
-    const res = new VirtualObservable(_get, _set)
+    var res: VirtualReadonlyObservable<A> | VirtualObservable<A>
+    if (isReadonlyObservableObject(obj)) {
+      res = new VirtualReadonlyObservable(_get)
+    } else {
+      res = new VirtualObservable(_get, _set)
+    }
 
-    for (var name in obj) {
-      var ob = obj[name]
-      if (ob instanceof Observable) {
+    for (var name in ro_obj) {
+      var ob = ro_obj[name]
+      if (ob instanceof ReadonlyObservable) {
         res.observe(ob, () => res.refresh())
       }
     }
@@ -638,13 +804,13 @@ export namespace o {
   }
 
 
-  export function observe<A, B = void>(obs: MaybeObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
+  export function observe<A, B = void>(obs: MaybeReadonlyObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
     if (obs instanceof Observable) {
       return obs.addObserver(fn)
     }
 
     if (call_immediately)
-      fn(obs, obs)
+      fn(o.get(obs), o.get(obs))
     return null
   }
 
