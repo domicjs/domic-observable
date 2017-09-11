@@ -710,6 +710,7 @@ export class VirtualObservable<T> extends Observable<T> {
  * @param arg
  */
 export function o<T>(arg: MaybeObservable<T>): Observable<T>
+export function o<T>(arg: MaybeObservable<T> | undefined): Observable<T | undefined>
 export function o<T>(arg: MaybeObservable<T>): Observable<T> {
   return arg instanceof Observable ? arg : new Observable(arg)
 }
