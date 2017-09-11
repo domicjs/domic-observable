@@ -1,4 +1,4 @@
-import {Observable, Observer, ObserverOptions} from '../observable'
+import {WritableObservable, Observer, ObserverOptions} from '../observable'
 
 export function cmp(a: any, b: any) {
   if (a === b) return true
@@ -62,7 +62,7 @@ export class Calls {
 
 var unregs: Observer<any>[] = []
 
-export function spyon<T>(obs: Observable<T>, options?: ObserverOptions) {
+export function spyon<T>(obs: WritableObservable<T>, options?: ObserverOptions) {
   var spy = new Calls()
   unregs.push(obs.addObserver(function (value, old) {
     spy.call(value, old)

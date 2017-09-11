@@ -5,8 +5,8 @@ export type UnregisterFunction = () => void
 
 export type ObserverFunction<T, U = void> = (newval: T, oldval: T) => U
 
+export type MaybeWritableObservable<T> = T | WritableObservable<T>
 export type MaybeObservable<T> = T | Observable<T>
-export type MaybeReadonlyObservable<T> = T | ReadonlyObservable<T>
 
 export type RecursivePartial<T> = {
   [P in keyof T]?: RecursivePartial<T[P]>;
@@ -41,7 +41,7 @@ export class Observer<A, B = void> {
   protected last_result: B
   protected is_paused = false
 
-  constructor(public fn: ObserverFunction<A, B>, public observable: ReadonlyObservable<A>) {
+  constructor(public fn: ObserverFunction<A, B>, public observable: Observable<A>) {
 
   }
 
@@ -83,7 +83,7 @@ export class ThrottleObserver<A, B> extends Observer<A, B> {
   last_call: number
   timeout: number | null
 
-  constructor(fn: ObserverFunction<A, B>, observable: ReadonlyObservable<A>, public throttle: number, public leading: boolean) {
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number, public leading: boolean) {
     super(fn, observable)
   }
 
@@ -118,7 +118,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
   saved_result: B
   timeout: number | null = null
 
-  constructor(fn: ObserverFunction<A, B>, observable: ReadonlyObservable<A>, public debounce: number, public leading: boolean) {
+  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number, public leading: boolean) {
     super(fn, observable)
   }
 
@@ -137,7 +137,7 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
 
 }
 
-export function make_observer<A, B>(obs: ReadonlyObservable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
+export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
   if (options.debounce)
     return new DebounceObserver(fn, obs, options.debounce, !!options.leading)
   if (options.throttle)
@@ -179,7 +179,7 @@ export function memoize<A, B>(fn: (arg: A, old: A) => B): (arg: A, old: A) => B 
 }
 
 
-export class ReadonlyObservable<T> {
+export class Observable<T> {
   protected observers: Observer<T, any>[] = []
   protected observed: Observer<any, any>[] = []
   protected paused_notify = -1
@@ -275,9 +275,9 @@ export class ReadonlyObservable<T> {
    * Observe another observable only when this observer itself
    * is being observed.
    */
-  observe<U, V = void>(observable: ReadonlyObservable<U>, observer: Observer<U, V>): Observer<U, V>
-  observe<U, V = void>(observable: ReadonlyObservable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
-  observe<U, V = void>(observable: ReadonlyObservable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
+  observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
+  observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
+  observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
     const observer = typeof _observer === 'function' ? make_observer(observable, _observer, options) : _observer
     this.observed.push(observer)
 
@@ -293,8 +293,8 @@ export class ReadonlyObservable<T> {
    * Use this only to tell typescript's typing system that the new
    * variable should not be used to perform transforms on this observable
    */
-  readonly(): ReadonlyObservable<T> {
-    return new VirtualReadonlyObservable(() => this.get())
+  readonly(): Observable<T> {
+    return new VirtualObservable(() => this.get())
   }
 
 
@@ -305,11 +305,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() > value
    * @tag transform-readonly
    */
-  gt(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  gt(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
   }
 
-  greaterThan(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  greaterThan(value: MaybeObservable<T>): Observable<boolean> {
     return this.gt(value)
   }
 
@@ -317,11 +317,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() < value
    * @tag transform-readonly
    */
-  lt(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  lt(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
   }
 
-  lesserThan(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  lesserThan(value: MaybeObservable<T>): Observable<boolean> {
     return this.lt(value)
   }
 
@@ -329,11 +329,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() === value
    * @tag transform-readonly
    */
-  eq(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  eq(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
   }
 
-  equal(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  equal(value: MaybeObservable<T>): Observable<boolean> {
     return this.eq(value)
   }
 
@@ -342,11 +342,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() !== value
    * @tag transform-readonly
    */
-  ne(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  ne(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
   }
 
-  notEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  notEqual(value: MaybeObservable<T>): Observable<boolean> {
     return this.ne(value)
   }
 
@@ -354,11 +354,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() >= value
    * @tag transform-readonly
    */
-  gte(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  gte(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
   }
 
-  greaterOrEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  greaterOrEqual(value: MaybeObservable<T>): Observable<boolean> {
     return this.gte(value)
   }
 
@@ -366,11 +366,11 @@ export class ReadonlyObservable<T> {
    * true when this.get() <= value
    * @tag transform-readonly
    */
-  lte(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  lte(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
   }
 
-  lesserOrEqual(value: MaybeReadonlyObservable<T>): ReadonlyObservable<boolean> {
+  lesserOrEqual(value: MaybeObservable<T>): Observable<boolean> {
     return this.lte(value)
   }
 
@@ -378,7 +378,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() is null or undefined
    * @tag transform-readonly
    */
-  isNull(): ReadonlyObservable<boolean> {
+  isNull(): Observable<boolean> {
     return this.tf(val => val == null)
   }
 
@@ -386,7 +386,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() is neither null nor undefined
    * @tag transform-readonly
    */
-  isNotNull(): ReadonlyObservable<boolean> {
+  isNotNull(): Observable<boolean> {
     return this.tf(val => val != null)
   }
 
@@ -394,7 +394,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() is strictly undefined
    * @tag transform-readonly
    */
-  isUndefined(): ReadonlyObservable<boolean> {
+  isUndefined(): Observable<boolean> {
     return this.tf(val => val === undefined)
   }
 
@@ -402,7 +402,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() is strictly not undefined
    * @tag transform-readonly
    */
-  isDefined(): ReadonlyObservable<boolean> {
+  isDefined(): Observable<boolean> {
     return this.tf(val => val !== undefined)
   }
 
@@ -410,7 +410,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() is === false
    * @tag transform-readonly
    */
-  isFalse(this: Observable<boolean>): ReadonlyObservable<boolean> {
+  isFalse(this: WritableObservable<boolean>): Observable<boolean> {
     return this.tf(val => val as any === false)
   }
 
@@ -418,7 +418,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() === true
    * @tag transform-readonly
    */
-  isTrue(this: Observable<boolean>): ReadonlyObservable<boolean> {
+  isTrue(this: WritableObservable<boolean>): Observable<boolean> {
     return this.tf(val => val as any === true)
   }
 
@@ -426,7 +426,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() would be false in an if condition
    * @tag transform-readonly
    */
-  isFalsy(): ReadonlyObservable<boolean> {
+  isFalsy(): Observable<boolean> {
     return this.tf(val => !val)
   }
 
@@ -434,7 +434,7 @@ export class ReadonlyObservable<T> {
    * true when this.get() would be true in an if condition
    * @tag transform-readonly
    */
-  isTruthy(): ReadonlyObservable<boolean> {
+  isTruthy(): Observable<boolean> {
     return this.tf(val => !!val)
   }
 
@@ -443,7 +443,7 @@ export class ReadonlyObservable<T> {
    * any of the provided observables is true.
    * @tag transform-readonly
    */
-  or(...args : MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
+  or(...args : MaybeWritableObservable<any>[]) : Observable<boolean> {
     return args.reduce((acc, arg) => arg.or(acc), this)
   }
 
@@ -451,35 +451,35 @@ export class ReadonlyObservable<T> {
    * True when this and all the values provided in args are true.
    * @tag transform-readonly
    */
-  and(...args: MaybeObservable<any>[]) : ReadonlyObservable<boolean> {
+  and(...args: MaybeWritableObservable<any>[]) : Observable<boolean> {
     return args.reduce((acc, arg) => arg.and(acc), this)
   }
 
   /**
    * @tag transform-readonly
    */
-  plus(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+  plus(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs + rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  minus(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+  minus(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs - rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  times(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+  times(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs * rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  dividedBy(this: Observable<number>, pl: Observable<number>): ReadonlyObservable<number> {
+  dividedBy(this: WritableObservable<number>, pl: WritableObservable<number>): Observable<number> {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs / rhs)
   }
 
@@ -488,11 +488,11 @@ export class ReadonlyObservable<T> {
    * @param fnget
    * @param fnset
    */
-  tf<U>(fnget: ObserverFunction<T, U>): ReadonlyObservable<U> {
+  tf<U>(fnget: ObserverFunction<T, U>): Observable<U> {
 
     const fn = new Observer(memoize(fnget), this)
 
-    var obs = new VirtualReadonlyObservable<U>(() => {
+    var obs = new VirtualObservable<U>(() => {
       return fn.call(this.get())
     })
 
@@ -501,19 +501,19 @@ export class ReadonlyObservable<T> {
     return obs
   }
 
-  p<U extends object, K extends keyof U>(this: ReadonlyObservable<U>, key: K): ReadonlyObservable<U[K]>
-  p<U>(this: ReadonlyObservable<{[key: string]: U}>, key: MaybeReadonlyObservable<string>): ReadonlyObservable<U | undefined>
-  p<U>(this: ReadonlyObservable<U[]>, key: MaybeReadonlyObservable<number>): ReadonlyObservable<U | undefined>
-  p(this: ReadonlyObservable<any>, key: MaybeReadonlyObservable<number|string>): ReadonlyObservable<any> {
+  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U | undefined>
+  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
+  p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
 
     const fn = new Observer<any, any>((arr) => arr[o.get(key)], this)
 
-    var obs = new VirtualReadonlyObservable(() => {
+    var obs = new VirtualObservable(() => {
       return fn.call(this.get())
     })
 
     obs.observe(this, () => obs.refresh())
-    if (key instanceof Observable)
+    if (key instanceof WritableObservable)
       obs.observe(key, () => obs.refresh())
 
     return obs
@@ -524,7 +524,7 @@ export class ReadonlyObservable<T> {
    * @param this
    * @param fn
    */
-  filtered<U>(this: ReadonlyObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): ReadonlyObservable<U[]> {
+  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
     return this.tf(
       memoize((arr) => {
         return arr.filter((item, index) => {
@@ -535,21 +535,21 @@ export class ReadonlyObservable<T> {
     )
   }
 
-  mapped<U, V>(this: ReadonlyObservable<U[]>, fn: (item: U) => V): ReadonlyObservable<V[]> {
+  mapped<U, V>(this: Observable<U[]>, fn: (item: U) => V): Observable<V[]> {
     return this.tf(
       memoize((arr) => arr.map(fn))
     )
   }
 
-  sliced<A>(this: ReadonlyObservable<A[]>, start?: MaybeReadonlyObservable<number>, end?: MaybeReadonlyObservable<number>): ReadonlyObservable<A[]> {
+  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
 
-    const res: VirtualReadonlyObservable<A[]> =
-      this.tf(memoize((arr) => arr.slice(o.get(start), o.get(end)))) as VirtualReadonlyObservable<A[]>
+    const res: VirtualObservable<A[]> =
+      this.tf(memoize((arr) => arr.slice(o.get(start), o.get(end)))) as VirtualObservable<A[]>
 
-    if (start instanceof ReadonlyObservable)
+    if (start instanceof Observable)
       res.observe(start, () => res.refresh())
 
-    if (end instanceof ReadonlyObservable)
+    if (end instanceof Observable)
       res.observe(end, () => res.refresh())
 
     return res
@@ -560,7 +560,7 @@ export class ReadonlyObservable<T> {
 /**
  *
  */
-export class Observable<T> extends ReadonlyObservable<T> {
+export class WritableObservable<T> extends Observable<T> {
 
   /**
    *
@@ -580,13 +580,13 @@ export class Observable<T> extends ReadonlyObservable<T> {
    * @param fnget
    * @param fnset
    */
-  tf<U>(fnget: ObserverFunction<T, U>): ReadonlyObservable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): Observable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): Observable<U> {
+  tf<U>(fnget: ObserverFunction<T, U>): Observable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): WritableObservable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): WritableObservable<U> {
 
     const fn = new Observer(memoize(fnget), this)
 
-    var obs = new VirtualObservable<U>(() => {
+    var obs = new VirtualWritableObservable<U>(() => {
       return fn.call(this.get())
     }, fnset)
 
@@ -595,14 +595,14 @@ export class Observable<T> extends ReadonlyObservable<T> {
     return obs
   }
 
-  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
-  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U | undefined>
-  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
-  p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
+  p<U extends object, K extends keyof U>(this: WritableObservable<U>, key: K): WritableObservable<U[K]>
+  p<U>(this: WritableObservable<{[key: string]: U}>, key: MaybeWritableObservable<string>): WritableObservable<U | undefined>
+  p<U>(this: WritableObservable<U[]>, key: MaybeWritableObservable<number>): WritableObservable<U | undefined>
+  p(this: WritableObservable<any>, key: MaybeWritableObservable<number|string>): WritableObservable<any> {
 
     const fn = new Observer<any, any>((arr) => arr[o.get(key)], this)
 
-    var obs = new VirtualObservable(() => {
+    var obs = new VirtualWritableObservable(() => {
       return fn.call(this.get())
     }, item => {
       const arr = this.getShallowClone()
@@ -611,7 +611,7 @@ export class Observable<T> extends ReadonlyObservable<T> {
     })
 
     obs.observe(this, () => obs.refresh())
-    if (key instanceof Observable)
+    if (key instanceof WritableObservable)
       obs.observe(key, () => obs.refresh())
 
     return obs
@@ -622,7 +622,7 @@ export class Observable<T> extends ReadonlyObservable<T> {
    * @param this
    * @param fn
    */
-  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
+  filtered<U>(this: WritableObservable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): WritableObservable<U[]> {
     var indexes: number[] = []
     return this.tf(
       memoize((arr) => {
@@ -649,8 +649,8 @@ export class Observable<T> extends ReadonlyObservable<T> {
     )
   }
 
-  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
-    const res: VirtualObservable<A[]> =
+  sliced<A>(this: WritableObservable<A[]>, start?: MaybeWritableObservable<number>, end?: MaybeWritableObservable<number>): WritableObservable<A[]> {
+    const res: VirtualWritableObservable<A[]> =
       this.tf(
         memoize((arr) => arr.slice(o.get(start), o.get(end))),
         (new_arr, old_arr) => {
@@ -659,39 +659,39 @@ export class Observable<T> extends ReadonlyObservable<T> {
           val.splice(o.get(start) || 0, _end ? _end - (o.get(start) || 0) : old_arr.length, ...new_arr)
           this.set(val)
         }
-      ) as VirtualObservable<A[]>
+      ) as VirtualWritableObservable<A[]>
 
-    if (start instanceof ReadonlyObservable)
+    if (start instanceof Observable)
       res.observe(start, () => res.refresh())
 
-    if (end instanceof ReadonlyObservable)
+    if (end instanceof Observable)
       res.observe(end, () => res.refresh())
 
     return res
   }
 
-  push<A>(this: Observable<A[]>, value: A) {
+  push<A>(this: WritableObservable<A[]>, value: A) {
     const copy = this.getShallowClone()
     const res = copy.push(value)
     this.set(copy)
     return res
   }
 
-  pop<A>(this: Observable<A[]>) {
+  pop<A>(this: WritableObservable<A[]>) {
     const copy = this.getShallowClone()
     const res = copy.pop()
     this.set(copy)
     return res
   }
 
-  shift<A>(this: Observable<A[]>) {
+  shift<A>(this: WritableObservable<A[]>) {
     const copy = this.getShallowClone()
     const res = copy.shift()
     this.set(copy)
     return res
   }
 
-  unshift<A>(this: Observable<A[]>, value: A) {
+  unshift<A>(this: WritableObservable<A[]>, value: A) {
     const copy = this.getShallowClone()
     const res = copy.unshift(value)
     this.set(copy)
@@ -704,31 +704,31 @@ export class Observable<T> extends ReadonlyObservable<T> {
    * Will trigger a compilation error if used with something else than
    * a boolean Observable.
    */
-  toggle(this: Observable<boolean>) {
+  toggle(this: WritableObservable<boolean>) {
     this.set(!this.get())
   }
 
-  add(this: Observable<number>, inc: number) {
+  add(this: WritableObservable<number>, inc: number) {
     this.set(this.get() + inc)
     return this
   }
 
-  sub(this: Observable<number>, dec: number) {
+  sub(this: WritableObservable<number>, dec: number) {
     this.set(this.get() - dec)
     return this
   }
 
-  mul(this: Observable<number>, coef: number) {
+  mul(this: WritableObservable<number>, coef: number) {
     this.set(this.get() * coef)
     return this
   }
 
-  div(this: Observable<number>, coef: number) {
+  div(this: WritableObservable<number>, coef: number) {
     this.set(this.get() / coef)
     return this
   }
 
-  mod(this: Observable<number>, m: number) {
+  mod(this: WritableObservable<number>, m: number) {
     this.set(this.get() % m)
     return this
   }
@@ -736,7 +736,7 @@ export class Observable<T> extends ReadonlyObservable<T> {
 }
 
 
-export class VirtualReadonlyObservable<T> extends ReadonlyObservable<T> {
+export class VirtualObservable<T> extends Observable<T> {
   constructor(
     protected fnget: () => T
   ) {
@@ -762,7 +762,7 @@ export class VirtualReadonlyObservable<T> extends ReadonlyObservable<T> {
  * An observable that does not its own value, but that depends
  * from outside getters and setters.
  */
-export class VirtualObservable<T> extends Observable<T> {
+export class VirtualWritableObservable<T> extends WritableObservable<T> {
 
   constructor(
     protected fnget: () => T,
@@ -799,17 +799,17 @@ export class VirtualObservable<T> extends Observable<T> {
  *
  * @param arg
  */
-export function o<T>(arg: MaybeObservable<T>): Observable<T> {
-  return arg instanceof Observable ? arg : new Observable(arg)
+export function o<T>(arg: MaybeWritableObservable<T>): WritableObservable<T> {
+  return arg instanceof WritableObservable ? arg : new WritableObservable(arg)
 }
 
 
+export type MaybeWritableObservableObject<T> = { [P in keyof T]:  MaybeWritableObservable<T[P]>}
 export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
-export type MaybeReadonlyObservableObject<T> = { [P in keyof T]:  MaybeReadonlyObservable<T[P]>}
 
-function isReadonlyObservableObject<T>(obj: any): obj is MaybeReadonlyObservable<T> {
+function isReadonlyObservableObject<T>(obj: any): obj is MaybeObservable<T> {
   for (var x in obj)
-    if (obj[x] instanceof Observable)
+    if (obj[x] instanceof WritableObservable)
       return false
   return true
 }
@@ -817,13 +817,13 @@ function isReadonlyObservableObject<T>(obj: any): obj is MaybeReadonlyObservable
 
 export namespace o {
 
-  export function get<A>(arg: MaybeReadonlyObservable<A>): A
-  export function get<A>(arg?: undefined | MaybeReadonlyObservable<A>): A | undefined
-  export function get<A>(arg: MaybeReadonlyObservable<A>): A {
-    return arg instanceof Observable ? arg.get() : arg
+  export function get<A>(arg: MaybeObservable<A>): A
+  export function get<A>(arg?: undefined | MaybeObservable<A>): A | undefined
+  export function get<A>(arg: MaybeObservable<A>): A {
+    return arg instanceof WritableObservable ? arg.get() : arg
   }
 
-  export function and(...args: ReadonlyObservable<any>[]): ReadonlyObservable<boolean> {
+  export function and(...args: Observable<any>[]): Observable<boolean> {
     if (args.length === 1)
       return args[0].isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
@@ -831,7 +831,7 @@ export namespace o {
     , args[0])
   }
 
-  export function or(...args: ReadonlyObservable<any>[]): ReadonlyObservable<boolean> {
+  export function or(...args: Observable<any>[]): Observable<boolean> {
     if (args.length === 1)
       return args[0].isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
@@ -840,10 +840,10 @@ export namespace o {
   }
 
 
+  export function merge<A extends object>(obj: MaybeWritableObservableObject<A>): WritableObservable<A>
   export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A>
-  export function merge<A extends object>(obj: MaybeReadonlyObservableObject<A>): ReadonlyObservable<A>
-  export function merge<A extends object>(obj: MaybeObservableObject<A> | MaybeReadonlyObservableObject<A>): Observable<A> | ReadonlyObservable<A> {
-    const ro_obj = obj as MaybeReadonlyObservableObject<A>
+  export function merge<A extends object>(obj: MaybeWritableObservableObject<A> | MaybeObservableObject<A>): WritableObservable<A> | Observable<A> {
+    const ro_obj = obj as MaybeObservableObject<A>
 
     function _get(): A {
       const res = {} as A
@@ -856,26 +856,26 @@ export namespace o {
     }
 
     function _set(_obj: A): A {
-      const _ob = obj as MaybeObservableObject<A>
+      const _ob = obj as MaybeWritableObservableObject<A>
       for (var name in _obj) {
         var ob = _ob[name]
-        if (ob instanceof Observable) {
+        if (ob instanceof WritableObservable) {
           ob.set(_obj[name])
         }
       }
       return _obj
     }
 
-    var res: VirtualReadonlyObservable<A> | VirtualObservable<A>
+    var res: VirtualObservable<A> | VirtualWritableObservable<A>
     if (isReadonlyObservableObject(obj)) {
-      res = new VirtualReadonlyObservable(_get)
+      res = new VirtualObservable(_get)
     } else {
-      res = new VirtualObservable(_get, _set)
+      res = new VirtualWritableObservable(_get, _set)
     }
 
     for (var name in ro_obj) {
       var ob = ro_obj[name]
-      if (ob instanceof ReadonlyObservable) {
+      if (ob instanceof Observable) {
         res.observe(ob, () => res.refresh())
       }
     }
@@ -885,8 +885,8 @@ export namespace o {
   }
 
 
-  export function observe<A, B = void>(obs: MaybeReadonlyObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
-    if (obs instanceof Observable) {
+  export function observe<A, B = void>(obs: MaybeObservable<A>, fn: ObserverFunction<A, B>, call_immediately = true): Observer<A, B> | null {
+    if (obs instanceof WritableObservable) {
       return obs.addObserver(fn)
     }
 
