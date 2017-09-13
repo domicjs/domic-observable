@@ -42,7 +42,8 @@ export class Observer<A, B = void> {
 
   call(new_value: A): B {
     const old = this.old_value
-    if (old !== new_value) {
+
+    if (typeof new_value !== 'undefined' && old !== new_value) {
       this.old_value = new_value
       const res = this.fn(new_value, old)
       this.last_result = res
