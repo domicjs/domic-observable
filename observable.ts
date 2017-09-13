@@ -48,6 +48,7 @@ export class Observer<A, B = void> {
       this.last_result = res
       return res
     }
+
     return this.last_result
   }
 
@@ -517,8 +518,8 @@ export class Observable<T> {
   }
 
   p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
-  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U | undefined>
-  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U | undefined>
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U>
+  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U>
   p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
 
     var obs = new VirtualObservable(() => {

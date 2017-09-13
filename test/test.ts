@@ -159,6 +159,18 @@ describe('basic operations', () => {
     expect(() => { o_f.set([1, 2]) }).to.throw
   })
 
+  it('deep filter', () => {
+    const o_arr = o([{a: {b: 1}}, {a: {b: 1}}] as {a: {b: number}}[])
+    const o_first = o_arr.p(0)
+    const o_a = o_first.p('a')
+    const o_b = o_a.p('b')
+    const spy_b = spyon(o_b)
+
+    o_b.set(3)
+    spy_b.was.called.once.with(3, 1)
+    expect(o_b.get()).to.equal(3)
+  })
+
   it('debounce', async function () {
     const o_simple = o(0)
     const s = spyon(o_simple, {debounce: 5})
