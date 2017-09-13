@@ -10,38 +10,16 @@ import {o} from '../observable'
 
 import {spyon, Calls, wait} from './common'
 
-beforeEach(() => {
-  o_deep = o({a: 1, b: {c: 1}})
-  o_simple = o(0)
-  o_deep_a = o_deep.p('a')
-  o_deep_b = o_deep.p('b')
-  o_deep_c = o_deep.p('b').p('c')
-  deep_spy = spyon(o_deep)
-  deep_c_spy = spyon(o_deep_c)
-  deep_a_spy = spyon(o_deep_a)
-  deep_b_spy = spyon(o_deep_b)
-  simple_spy = spyon(o_simple)
-})
-
-afterEach(function () {
+afterEach(() => {
   spyon.clean()
 })
-
-var o_deep = o({a: 1, b: {c: 1}})
-var o_simple = o(0)
-var o_deep_a = o_deep.p('a')
-var o_deep_b = o_deep.p('b')
-var o_deep_c = o_deep.p('b').p('c')
-var simple_spy = spyon(o_simple)
-var deep_spy = spyon(o_deep)
-var deep_c_spy = spyon(o_deep_c)
-var deep_a_spy = spyon(o_deep_a)
-var deep_b_spy = spyon(o_deep_b)
-
 
 describe('basic operations', () => {
 
   it('set and get work as expected', () => {
+    const o_simple = o(0)
+    const simple_spy = spyon(o_simple)
+
     expect(o_simple.get()).to.equal(0)
     o_simple.set(1)
     expect(o_simple.get()).to.equal(1)
@@ -49,6 +27,9 @@ describe('basic operations', () => {
   })
 
   it('get/set properties work and change original object', () => {
+    const o_deep = o({a: 1})
+    const o_deep_a = o_deep.p('a')
+
     const deep = o_deep.get()
     expect(o_deep_a.get()).to.equal(1)
     o_deep_a.set(2)
@@ -57,6 +38,13 @@ describe('basic operations', () => {
   })
 
   it('observing a property gets called when changing', () => {
+    const o_deep = o({a: 1, b: {c: 1}})
+    const o_deep_b = o_deep.p('b')
+    const o_deep_c = o_deep_b.p('c')
+    const deep_c_spy = spyon(o_deep_c)
+    const deep_b_spy = spyon(o_deep_b)
+    const deep_spy = spyon(o_deep)
+
     o_deep_c.set(3)
     expect(o_deep_c.get()).to.equal(3)
     deep_c_spy.was.called.once.with(3, 1)
@@ -80,6 +68,9 @@ describe('basic operations', () => {
   })
 
   it('get/set on an unobserved property still returns the correct value', () => {
+    const o_deep = o({a: 1, b: {c: 1}})
+    const o_deep_a = o_deep.p('a')
+
     const o_deep_a2 = o_deep.p('a')
     expect(o_deep_a2.get()).to.equal(1)
     o_deep_a2.set(3)
@@ -88,6 +79,9 @@ describe('basic operations', () => {
   })
 
   it('merge observable get/set', () => {
+    const o_simple = o(0)
+    const o_deep = o({a: 1, b: {c: 1}})
+
     const om = o.merge({one: o_simple, two: o_deep})
     expect(om.p('one').get()).to.equal(0)
 
@@ -99,6 +93,9 @@ describe('basic operations', () => {
   })
 
   it('merge observable addObserver', () => {
+    const o_simple = o(0)
+    const o_deep = o({a: 1, b: {c: 1}})
+    const simple_spy = spyon(o_simple)
     const om = o.merge({one: o_simple, two: o_deep})
     const o_one = om.p('one')
     const spy = spyon(o_one)
@@ -115,12 +112,16 @@ describe('basic operations', () => {
   })
 
   it('pausing and unpausing observable', () => {
+    const o_simple = o(0)
+    const simple_spy = spyon(o_simple)
     const other_simple_spy = spyon(o_simple)
+
     o_simple.pause()
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
     o_simple.resume()
+
     simple_spy.was.called.once.with(3, 0)
     other_simple_spy.was.called.once.with(3, 0)
   })
@@ -128,15 +129,15 @@ describe('basic operations', () => {
   it('pause and unpause observer', () => {
     const o_a = o(1)
     const spy = new Calls()
-    const obs = o_a.addObserver(v => spy.call(v))
+    const obs = o_a.addObserver((v, old) => typeof old !== 'undefined' && spy.call(v))
 
     o_a.set(2)
     spy.was.called.once.with(2)
-    obs.pause()
+    obs.stopObserving()
     o_a.set(3)
     o_a.set(4)
     o_a.set(5)
-    obs.resume()
+    obs.startObserving()
     spy.was.called.once.with(5)
   })
 
@@ -159,7 +160,10 @@ describe('basic operations', () => {
   })
 
   it('debounce', async function () {
+    const o_simple = o(0)
     const s = spyon(o_simple, {debounce: 5})
+
+    await wait(11)
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
@@ -173,7 +177,10 @@ describe('basic operations', () => {
   })
 
   it('throttle', async function () {
+    const o_simple = o(0)
     const s = spyon(o_simple, {throttle: 10})
+
+    await wait(11)
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
@@ -187,6 +194,8 @@ describe('basic operations', () => {
   })
 
   it('assign', () => {
+    const o_deep = o({a: 1, b: {c: 1}})
+
     const deep = o_deep.get()
     o_deep.assign({b: {c: 4}})
     const deep2 = o_deep.get()
