@@ -11,6 +11,7 @@ export type RecursivePartial<T> = {
   [P in keyof T]?: RecursivePartial<T[P]>;
 };
 
+export type ObservableProxy<T> = {[P in keyof T]: Observable<T[P]> & ObservableProxy<T[P]>}
 
 /**
  * Options that determine how we are to listen to different types of updates.
@@ -42,6 +43,7 @@ export class Observer<A, B = void> {
 
   call(new_value: A): B {
     const old = this.old_value
+    if (new_value instanceof Observable) throw new Error('WTF')
 
     if (typeof new_value !== 'undefined' && old !== new_value) {
       this.old_value = new_value
@@ -170,29 +172,29 @@ export function memoize<A, B>(fn: (arg: A, old: A | undefined) => B): (arg: A, o
 
 
 export class Observable<T> {
-  protected observers: Observer<T, any>[] = []
-  protected observed: Observer<any, any>[] = []
-  protected paused_notify = -1
+  protected __observers: Observer<T, any>[] = []
+  protected __observed: Observer<any, any>[] = []
+  protected __paused_notify = -1
 
   // protected readonly value: T
-  constructor(protected readonly value: T) {
-    this.value = value
+  constructor(protected readonly __value: T) {
+    this.__value = __value
   }
 
   stopObservers() {
-    for (var observer of this.observers) {
+    for (var observer of this.__observers) {
       observer.stopObserving()
     }
-    for (observer of this.observed) {
+    for (observer of this.__observed) {
       observer.stopObserving()
     }
   }
 
   startObservers() {
-    for (var observer of this.observers) {
+    for (var observer of this.__observers) {
       observer.startObserving()
     }
-    for (observer of this.observed) {
+    for (observer of this.__observed) {
       observer.startObserving()
     }
   }
@@ -203,7 +205,7 @@ export class Observable<T> {
    * NOTE: treat this value as being entirely readonly !
    */
   get(): T {
-    return this.value
+    return this.__value
   }
 
   /**
@@ -222,7 +224,7 @@ export class Observable<T> {
    * @param value
    */
   set(value: T): void {
-    (this.value as any) = value
+    (this.__value as any) = value
     this.notify()
   }
 
@@ -231,13 +233,13 @@ export class Observable<T> {
   }
 
   pause() {
-    if (this.paused_notify === -1)
-      this.paused_notify = 0
+    if (this.__paused_notify === -1)
+      this.__paused_notify = 0
   }
 
   resume() {
-    const frozen = this.paused_notify
-    this.paused_notify = -1
+    const frozen = this.__paused_notify
+    this.__paused_notify = -1
     if (frozen > 0)
       this.notify()
   }
@@ -249,11 +251,11 @@ export class Observable<T> {
    * @param old_value The old value of this observer
    */
   notify() {
-    if (this.paused_notify > -1) {
-      this.paused_notify = 1
+    if (this.__paused_notify > -1) {
+      this.__paused_notify = 1
     } else {
-      for (var ob of this.observers)
-        ob.call(this.value)
+      for (var ob of this.__observers)
+        ob.call(this.__value)
     }
   }
 
@@ -266,12 +268,13 @@ export class Observable<T> {
 
     const ob = typeof _ob === 'function' ? make_observer(this, _ob, options) : _ob
 
-    this.observers.push(ob)
-    ob.call(this.get())
+    const value = this.get()
+    this.__observers.push(ob)
+    ob.call(value)
 
     // Subscribe to the observables we are meant to subscribe to.
-    if (this.observers.length === 1) {
-      this.observed.forEach(ob => {
+    if (this.__observers.length === 1) {
+      this.__observed.forEach(ob => {
         ob.startObserving()
       })
     }
@@ -284,14 +287,14 @@ export class Observable<T> {
    * @param ob
    */
   removeObserver(ob: Observer<T, any>): void {
-    this.observers = this.observers.filter(_ob => _ob !== ob)
+    this.__observers = this.__observers.filter(_ob => _ob !== ob)
 
-    if (this.observers.length === 0) {
+    if (this.__observers.length === 0) {
       // Since we're not being watched anymore we unregister
       // ourselves from the observables we were watching to
       // have them lose their reference to us and thus allow
       // us to be garbage collected if needed.
-      this.observed.forEach(o => o.stopObserving())
+      this.__observed.forEach(o => o.stopObserving())
     }
   }
 
@@ -303,9 +306,9 @@ export class Observable<T> {
   observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
   observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
     const obs = typeof _observer === 'function' ? make_observer(observable, _observer, options) : _observer
-    this.observed.push(obs)
+    this.__observed.push(obs)
 
-    if (this.observers.length > 0) {
+    if (this.__observers.length > 0) {
       // start observing immediately if we're already being observed
       obs.startObserving()
     }
@@ -656,6 +659,21 @@ export class Observable<T> {
     return this
   }
 
+  /**
+   * Return a proxy instance that allows using this observable
+   * (almost) like if it were the original object.
+   */
+  proxy(): this & ObservableProxy<T> {
+    return new Proxy(this, {
+      get(target: any, name) {
+        if (target[name]) {
+          return target[name]
+        }
+        return target.p(name).proxy()
+      }
+    }) as any
+  }
+
 }
 
 
@@ -673,19 +691,19 @@ export class VirtualObservable<T> extends Observable<T> {
   }
 
   refresh() {
-    (this.value as any) = this.fnget()
+    (this.__value as any) = this.fnget()
     this.notify()
   }
 
   get(): T {
-    if (this.observers.length === 0)
+    if (this.__observers.length === 0)
       this.refresh()
-    return this.value
+    return this.__value
   }
 
   set(value: T): void {
     // Missing a way of not recursing infinitely.
-    const old_value = this.value;
+    const old_value = this.__value;
     if (!this.fnset) {
       console.warn('attempted to set a value to a readonly observable')
     }

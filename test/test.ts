@@ -232,4 +232,16 @@ describe('basic operations', () => {
     expect(a2.b.prop).to.equal(3)
     expect(a3.b.prop).to.be.undefined
   })
+
+  it('proxy actually does something', () => {
+    const o_deep = o({a: 1, b: {c: 1}}).proxy()
+    const o_c = o_deep.b.c
+    const spy_b = spyon(o_deep.b)
+    const spy_c = spyon(o_c)
+    o_c.set(3)
+
+    spy_c.was.called.once.with(3, 1)
+    spy_b.was.called.once.with({c: 3}, {c: 1})
+    expect(o_c.get()).to.equal(3)
+  })
 })
