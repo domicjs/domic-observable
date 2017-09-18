@@ -666,10 +666,9 @@ export class Observable<T> {
   proxy(): this & ObservableProxy<T> {
     return new Proxy(this, {
       get(target: any, name) {
-        if (target[name]) {
-          return target[name]
-        }
-        return target.p(name).proxy()
+        if (typeof target[name] === 'function')
+          return target[name].bind(target)
+        return target[name] || target.p(name).proxy()
       }
     }) as any
   }
