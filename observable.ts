@@ -11,7 +11,7 @@ export type RecursivePartial<T> = {
   [P in keyof T]?: RecursivePartial<T[P]>;
 };
 
-export type ObservableProxy<T> = {[P in keyof T]: Observable<T[P]> & ObservableProxy<T[P]>}
+export type ObservableProxy<T> = Observable<T> & {[P in keyof T]: ObservableProxy<T[P]>}
 
 /**
  * Options that determine how we are to listen to different types of updates.
@@ -663,11 +663,14 @@ export class Observable<T> {
    * Return a proxy instance that allows using this observable
    * (almost) like if it were the original object.
    */
-  proxy(): this & ObservableProxy<T> {
+  proxy(): ObservableProxy<T> {
     return new Proxy(this, {
       get(target: any, name) {
         if (typeof target[name] === 'function')
-          return target[name].bind(target)
+          return function () {
+            var res = target[name].apply(target, arguments)
+            return res instanceof Observable ? res.proxy() : res
+          }
         return target[name] || target.p(name).proxy()
       }
     }) as any
