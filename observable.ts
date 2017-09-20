@@ -274,9 +274,10 @@ export class Observable<T> {
 
     // Subscribe to the observables we are meant to subscribe to.
     if (this.__observers.length === 1) {
-      this.__observed.forEach(ob => {
-        ob.startObserving()
-      })
+      const _obs = this.__observed
+      for (var i = 0; i < _obs.length; i++) {
+        _obs[i].startObserving()
+      }
     }
 
     return ob
@@ -294,7 +295,10 @@ export class Observable<T> {
       // ourselves from the observables we were watching to
       // have them lose their reference to us and thus allow
       // us to be garbage collected if needed.
-      this.__observed.forEach(o => o.stopObserving())
+      const _obs = this.__observed
+      const len = _obs.length
+      for (var i = 0; i < len; i++)
+        _obs[i].stopObserving()
     }
   }
 
