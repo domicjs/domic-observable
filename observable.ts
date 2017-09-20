@@ -288,7 +288,11 @@ export class Observable<T> {
    * @param ob
    */
   removeObserver(ob: Observer<T, any>): void {
-    this.__observers = this.__observers.filter(_ob => _ob !== ob)
+    var _new_obs: Observer<T, any>[] = []
+    for (var _o of this.__observers)
+      if (_o !== ob)
+        _new_obs.push(_o)
+    this.__observers = _new_obs
 
     if (this.__observers.length === 0) {
       // Since we're not being watched anymore we unregister
@@ -557,11 +561,16 @@ export class Observable<T> {
     return this.tf(
       memoize((arr) => {
         indexes = []
-        return arr.filter((item, index) => {
-          var res = fn(item, index, arr)
-          if (res) indexes.push(index)
-          return res
-        })
+        var len = arr.length
+        var res = [] as U []
+        for (var i = 0; i < len; i++) {
+          var item = arr[i]
+          if (fn(item, i, arr)) {
+            res.push(item)
+            indexes.push(i)
+          }
+        }
+        return res
       }),
       (transformed_array, old_transformed) => {
         const len = transformed_array.length
