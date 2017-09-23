@@ -583,20 +583,35 @@ export class Observable<T> {
    * This is generally used to filter or resort an array freely while maintaining
    * the possibility to set its individual properties.
    *
+   * It also checks if the individual items changed
+   *
    * @param fn The transform function
    */
   arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): Observable<A[]> {
     var prev_indexes: number[]
+    var prev_result: A[]
 
-    return this.tf(arr => {
+    return this.tf((arr, old) => {
       const indexes = fn(arr)
-      if (prev_indexes && prev_indexes.length === indexes.length) {
+      if (prev_indexes && prev_indexes.length === indexes.length && old) {
         // Check if the individual items did indeed change to not
-        // trigger a lot of calls
-        // FIXME
+        // trigger a lot of calls when the change came from an item not watched
+        // by this specific array transform.
+        var l = prev_indexes.length
+
+        for (var i = 0; i < l; i++) {
+          if (prev_indexes[i] !== indexes[i] || arr[indexes[i]] !== old[indexes[i]])
+            break
+        }
+
+        // If we went to the end, then it means that this is most likely
+        // the same array.
+        if (i === l)
+          return prev_result
       }
       prev_indexes = indexes
-      return map(indexes, id => arr[id])
+      prev_result = map(indexes, id => arr[id])
+      return prev_result
     },
     (transformed_array, old_transform) => {
       var arr = this.getShallowClone()
@@ -628,57 +643,34 @@ export class Observable<T> {
           res.push(i)
       return res
     })
+  }
 
-    // var indexes: number[] = []
-    // return this.tf(
-    //   memoize((arr) => {
-    //     indexes = []
-    //     var len = arr.length
-    //     var res = [] as U []
-    //     for (var i = 0; i < len; i++) {
-    //       var item = arr[i]
-    //       if (fn(item, i, arr)) {
-    //         res.push(item)
-    //         indexes.push(i)
-    //       }
-    //     }
-    //     return res
-    //   }),
-    //   (transformed_array, old_transformed) => {
-    //     const len = transformed_array.length
-
-    //     if (old_transformed && len !== old_transformed.length)
-    //         throw new Error(`filtered arrays may not change size by themselves`)
-
-    //     var local_array: U[] = this.getShallowClone()
-    //     for (var i = 0; i < len; i++) {
-    //       local_array[indexes[i]] = transformed_array[i]
-    //     }
-    //     this.set(local_array)
-    //     return transformed_array
-    //   }
-    // )
+  sorted<U> (this: Observable<U[]>, fn: (a: U, b: U) => (1 | 0 | -1)) {
+    return this.arrayTransform(arr => {
+      var indices = []
+      var l = arr.length
+      for (var i = 0; l < l; i++)
+        indices.push(i)
+      indices.sort((a, b) => fn(arr[a], arr[b]))
+      return indices
+    })
   }
 
   sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
-    const res: VirtualObservable<A[]> =
-      this.tf(
-        memoize((arr) => arr.slice(o.get(start), o.get(end))),
-        (new_arr, old_arr) => {
-          const val = this.getShallowClone()
-          const _end = o.get(end)
-          val.splice(o.get(start) || 0, _end ? _end - (o.get(start) || 0) : old_arr!.length, ...new_arr)
-          this.set(val)
-        }
-      ) as VirtualObservable<A[]>
+    var obs = this.arrayTransform(arr => {
+      var indices = []
+      var l = o.get(end) || arr.length
+      for (var i = o.get(start) || 0; i < l; i++)
+        indices.push(i)
+      return indices
+    }) as VirtualObservable<A[]>
 
     if (start instanceof Observable)
-      res.observe(start, () => res.refresh())
-
+      obs.observe(start, s => obs.refresh())
     if (end instanceof Observable)
-      res.observe(end, () => res.refresh())
+      obs.observe(end, e => obs.refresh())
 
-    return res
+    return obs
   }
 
   push<A>(this: Observable<A[]>, value: A) {
