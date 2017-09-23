@@ -588,42 +588,23 @@ export class Observable<T> {
    * @param fn The transform function
    */
   arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): Observable<A[]> {
-    var prev_indexes: number[]
-    var prev_result: A[]
+    var indexes: number[]
 
     return this.tf((arr, old) => {
-      const indexes = fn(arr)
-      if (prev_indexes && prev_indexes.length === indexes.length && old) {
-        // Check if the individual items did indeed change to not
-        // trigger a lot of calls when the change came from an item not watched
-        // by this specific array transform.
-        var l = prev_indexes.length
-
-        for (var i = 0; i < l; i++) {
-          if (prev_indexes[i] !== indexes[i] || arr[indexes[i]] !== old[indexes[i]])
-            break
-        }
-
-        // If we went to the end, then it means that this is most likely
-        // the same array.
-        if (i === l)
-          return prev_result
-      }
-      prev_indexes = indexes
-      prev_result = map(indexes, id => arr[id])
-      return prev_result
+      indexes = fn(arr)
+      return map(indexes, id => arr[id])
     },
-    (transformed_array, old_transform) => {
+    transformed_array => {
       var arr = this.getShallowClone()
-      var len = prev_indexes.length
+      var len = indexes.length
 
       // FIXME should handle the case when an array of different length
       // is tried to be set here.
-      if (transformed_array.length !== prev_indexes.length)
+      if (transformed_array.length !== indexes.length)
         throw new Error('transformed arrays must not change length')
 
       for (var i = 0; i < len; i++) {
-        arr[prev_indexes[i]] = transformed_array[i]
+        arr[indexes[i]] = transformed_array[i]
       }
       this.set(arr)
     })
