@@ -171,6 +171,31 @@ export function memoize<A, B>(fn: (arg: A, old: A | undefined) => B): (arg: A, o
 }
 
 
+export function map<T, U>(arr: T[], fn: (item: T, index: number, arr: T[]) => U) {
+  var res: U[] = []
+  var len = arr.length
+  for (var i = 0; i < len; i++)
+    res.push(fn(arr[i], i, arr))
+  return res
+}
+
+export function filter<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => boolean): T[] {
+  var res: T[] = []
+  var len = arr.length
+  for (var i = 0; i < len; i++) {
+    var item = arr[i]
+    if (fn(item, i, arr))
+      res.push(item)
+  }
+  return res
+}
+
+export function foreach<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => void): void {
+  var l = arr.length
+  for (var i = 0; i < l; i++)
+    fn(arr[i], i, arr)
+}
+
 export class Observable<T> {
   protected __observers: Observer<T, any>[] = []
   protected __observed: Observer<any, any>[] = []
@@ -552,40 +577,87 @@ export class Observable<T> {
   }
 
   /**
+   * Return an observable of array which contains the elements whose indexes
+   * were returned by the callback.
+   *
+   * This is generally used to filter or resort an array freely while maintaining
+   * the possibility to set its individual properties.
+   *
+   * @param fn The transform function
+   */
+  arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): Observable<A[]> {
+    var prev_indexes: number[]
+
+    return this.tf(arr => {
+      const indexes = fn(arr)
+      if (prev_indexes && prev_indexes.length === indexes.length) {
+        // Check if the individual items did indeed change to not
+        // trigger a lot of calls
+        // FIXME
+      }
+      prev_indexes = indexes
+      return map(indexes, id => arr[id])
+    },
+    (transformed_array, old_transform) => {
+      var arr = this.getShallowClone()
+      var len = prev_indexes.length
+
+      // FIXME should handle the case when an array of different length
+      // is tried to be set here.
+      if (transformed_array.length !== prev_indexes.length)
+        throw new Error('transformed arrays must not change length')
+
+      for (var i = 0; i < len; i++) {
+        arr[prev_indexes[i]] = transformed_array[i]
+      }
+      this.set(arr)
+    })
+  }
+
+  /**
    *
    * @param this
    * @param fn
    */
   filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
-    var indexes: number[] = []
-    return this.tf(
-      memoize((arr) => {
-        indexes = []
-        var len = arr.length
-        var res = [] as U []
-        for (var i = 0; i < len; i++) {
-          var item = arr[i]
-          if (fn(item, i, arr)) {
-            res.push(item)
-            indexes.push(i)
-          }
-        }
-        return res
-      }),
-      (transformed_array, old_transformed) => {
-        const len = transformed_array.length
+    return this.arrayTransform(arr => {
+      var res: number[] = []
+      var len = arr.length
+      for (var i = 0; i < len; i++)
+        if (fn(arr[i], i, arr))
+          res.push(i)
+      return res
+    })
 
-        if (old_transformed && len !== old_transformed.length)
-            throw new Error(`filtered arrays may not change size by themselves`)
+    // var indexes: number[] = []
+    // return this.tf(
+    //   memoize((arr) => {
+    //     indexes = []
+    //     var len = arr.length
+    //     var res = [] as U []
+    //     for (var i = 0; i < len; i++) {
+    //       var item = arr[i]
+    //       if (fn(item, i, arr)) {
+    //         res.push(item)
+    //         indexes.push(i)
+    //       }
+    //     }
+    //     return res
+    //   }),
+    //   (transformed_array, old_transformed) => {
+    //     const len = transformed_array.length
 
-        var local_array: U[] = this.getShallowClone()
-        for (var i = 0; i < len; i++) {
-          local_array[indexes[i]] = transformed_array[i]
-        }
-        this.set(local_array)
-        return transformed_array
-      }
-    )
+    //     if (old_transformed && len !== old_transformed.length)
+    //         throw new Error(`filtered arrays may not change size by themselves`)
+
+    //     var local_array: U[] = this.getShallowClone()
+    //     for (var i = 0; i < len; i++) {
+    //       local_array[indexes[i]] = transformed_array[i]
+    //     }
+    //     this.set(local_array)
+    //     return transformed_array
+    //   }
+    // )
   }
 
   sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
