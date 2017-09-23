@@ -129,14 +129,6 @@ export class DebounceObserver<A, B> extends Observer<A, B> {
 
 }
 
-export function make_observer<A, B>(obs: Observable<A>, fn: ObserverFunction<A, B>, options: ObserverOptions = {}) {
-  if (options.debounce)
-    return new DebounceObserver(fn, obs, options.debounce, !!options.leading)
-  if (options.throttle)
-    return new ThrottleObserver(fn, obs, options.throttle, !!options.leading)
-  return new Observer(fn, obs)
-}
-
 
 export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
   if (typeof assignement !== 'object' || assignement.constructor !== Object)
@@ -284,6 +276,14 @@ export class Observable<T> {
     }
   }
 
+  makeObserver<U = void>(fn: ObserverFunction<T, U>, options: ObserverOptions = {}): Observer<T, U> {
+    if (options.debounce)
+      return new DebounceObserver(fn, this, options.debounce, !!options.leading)
+    if (options.throttle)
+      return new ThrottleObserver(fn, this, options.throttle, !!options.leading)
+    return new Observer(fn, this)
+  }
+
   /**
    * Add an observer.
    */
@@ -291,7 +291,7 @@ export class Observable<T> {
   addObserver<U = void>(fn: ObserverFunction<T, U>, options?: ObserverOptions): Observer<T, U>
   addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>, options?: ObserverOptions): Observer<T, U> {
 
-    const ob = typeof _ob === 'function' ? make_observer(this, _ob, options) : _ob
+    const ob = typeof _ob === 'function' ? this.makeObserver(_ob, options) : _ob
 
     const value = this.get()
     this.__observers.push(ob)
@@ -338,7 +338,7 @@ export class Observable<T> {
   observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
   observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
   observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
-    const obs = typeof _observer === 'function' ? make_observer(observable, _observer, options) : _observer
+    const obs = typeof _observer === 'function' ? observable.makeObserver(_observer, options) : _observer
     this.__observed.push(obs)
 
     if (this.__observers.length > 0) {
