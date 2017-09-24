@@ -276,7 +276,7 @@ export class Observable<T> {
     }
   }
 
-  makeObserver<U = void>(fn: ObserverFunction<T, U>, options: ObserverOptions = {}): Observer<T, U> {
+  createObserver<U = void>(fn: ObserverFunction<T, U>, options: ObserverOptions = {}): Observer<T, U> {
     if (options.debounce)
       return new DebounceObserver(fn, this, options.debounce, !!options.leading)
     if (options.throttle)
@@ -291,7 +291,7 @@ export class Observable<T> {
   addObserver<U = void>(fn: ObserverFunction<T, U>, options?: ObserverOptions): Observer<T, U>
   addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>, options?: ObserverOptions): Observer<T, U> {
 
-    const ob = typeof _ob === 'function' ? this.makeObserver(_ob, options) : _ob
+    const ob = typeof _ob === 'function' ? this.createObserver(_ob, options) : _ob
 
     const value = this.get()
     this.__observers.push(ob)
@@ -338,7 +338,7 @@ export class Observable<T> {
   observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
   observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
   observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
-    const obs = typeof _observer === 'function' ? observable.makeObserver(_observer, options) : _observer
+    const obs = typeof _observer === 'function' ? observable.createObserver(_observer, options) : _observer
     this.__observed.push(obs)
 
     if (this.__observers.length > 0) {
