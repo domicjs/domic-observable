@@ -258,15 +258,14 @@ export class Observable<T> {
   }
 
   pause() {
+    this.stopObservers()
     if (this.__paused_notify === -1)
       this.__paused_notify = 0
   }
 
   resume() {
-    const frozen = this.__paused_notify
     this.__paused_notify = -1
-    if (frozen > 0)
-      this.notify()
+    this.startObservers()
   }
 
   /**
@@ -301,9 +300,7 @@ export class Observable<T> {
 
     const ob = typeof _ob === 'function' ? this.createObserver(_ob, options) : _ob
 
-    const value = this.get()
     this.__observers.push(ob)
-    ob.call(value)
 
     // Subscribe to the observables we are meant to subscribe to.
     if (this.__observers.length === 1) {
@@ -762,8 +759,9 @@ export class VirtualObservable<T> extends Observable<T> {
   }
 
   get(): T {
-    if (this.__observers.length === 0)
+    if (this.__observers.length === 0) {
       this.refresh()
+    }
     return this.__value
   }
 
@@ -847,12 +845,14 @@ export namespace o {
 
     var res = new VirtualObservable(_get, _set)
 
+    res.pause()
     for (var name in ro_obj) {
       var ob = ro_obj[name]
       if (ob instanceof Observable) {
         res.observe(ob, () => res.refresh())
       }
     }
+    res.resume()
 
     return res
 
