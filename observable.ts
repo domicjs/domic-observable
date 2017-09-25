@@ -32,6 +32,29 @@ export interface ObserverOptions {
 
 }
 
+
+/**
+ *
+ */
+export function debounce<A, B, C, D, E, Z, Fn = (a: A, b: B, c: C, d: D, e: E) => Z>(fn: Fn, ms: number): Fn
+export function debounce<A, B, C, D, Z, Fn = (a: A, b: B, c: C, d: D) => Z>(fn: Fn, ms: number): Fn
+export function debounce<A, B, C, Z, Fn = (a: A, b: B, c: C) => Z>(fn: Fn, ms: number): Fn
+export function debounce<A, B, Z, Fn = (a: A, b: B) => Z>(fn: Fn, ms: number): Fn
+export function debounce<A, Z>(fn: (a: A) => Z, ms: number): Z
+export function debounce(fn: any, ms: number): any {
+  var timer: number
+  var prev_res: any
+
+  return function (this: any, ...args: any[]) {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      prev_res = fn.apply(this, args)
+    }, ms)
+    return prev_res
+  }
+}
+
+
 export class Observer<A, B = void> {
 
   protected old_value: A
@@ -144,21 +167,6 @@ export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
     return cloned
   } else {
     return value
-  }
-}
-
-
-export function memoize<A, B>(fn: (arg: A, old: A | undefined) => B): (arg: A, old: A | undefined) => B {
-  var last_value: A
-  var last_value_bis: A
-  var last_result: B
-  return function (arg: A, old: A): B {
-    if (arg === last_value && old === last_value_bis)
-      return last_result
-    last_value = arg
-    last_value_bis = old
-    last_result = fn(arg, old)
-    return last_result
   }
 }
 
@@ -539,11 +547,11 @@ export class Observable<T> {
    * @param fnget
    * @param fnset
    */
-  tf<U>(fnget: ObserverFunction<T, U>): Observable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): Observable<U>
-  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): Observable<U> {
+  tf<U>(fnget: ObserverFunction<T, U>): VirtualObservable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset: ObserverFunction<U>): VirtualObservable<U>
+  tf<U>(fnget: ObserverFunction<T, U>, fnset?: ObserverFunction<U>): VirtualObservable<U> {
 
-    const fn = new Observer(memoize(fnget), this)
+    const fn = new Observer(fnget, this)
 
     var obs = new VirtualObservable<U>(() => {
       return fn.call(this.get())
@@ -554,10 +562,10 @@ export class Observable<T> {
     return obs
   }
 
-  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): Observable<U[K]>
-  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): Observable<U>
-  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): Observable<U>
-  p(this: Observable<any>, key: MaybeObservable<number|string>): Observable<any> {
+  p<U extends object, K extends keyof U>(this: Observable<U>, key: K): VirtualObservable<U[K]>
+  p<U>(this: Observable<{[key: string]: U}>, key: MaybeObservable<string>): VirtualObservable<U>
+  p<U>(this: Observable<U[]>, key: MaybeObservable<number>): VirtualObservable<U>
+  p(this: Observable<any>, key: MaybeObservable<number|string>): VirtualObservable<any> {
 
     var obs = new VirtualObservable(() => {
       return this.get()[o.get(key)]
@@ -587,10 +595,10 @@ export class Observable<T> {
    *
    * @param fn The transform function
    */
-  arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): Observable<A[]> {
+  arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): VirtualObservable<A[]> {
     var indexes: number[]
 
-    return this.tf((arr, old) => {
+    return this.tf(arr => {
       indexes = fn(arr)
       return map(indexes, id => arr[id])
     },
@@ -598,8 +606,6 @@ export class Observable<T> {
       var arr = this.getShallowClone()
       var len = indexes.length
 
-      // FIXME should handle the case when an array of different length
-      // is tried to be set here.
       if (transformed_array.length !== indexes.length)
         throw new Error('transformed arrays must not change length')
 
@@ -615,7 +621,7 @@ export class Observable<T> {
    * @param this
    * @param fn
    */
-  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): Observable<U[]> {
+  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): VirtualObservable<U[]> {
     return this.arrayTransform(arr => {
       var res: number[] = []
       var len = arr.length
@@ -637,14 +643,14 @@ export class Observable<T> {
     })
   }
 
-  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): Observable<A[]> {
+  sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): VirtualObservable<A[]> {
     var obs = this.arrayTransform(arr => {
       var indices = []
       var l = o.get(end) || arr.length
       for (var i = o.get(start) || 0; i < l; i++)
         indices.push(i)
       return indices
-    }) as VirtualObservable<A[]>
+    })
 
     if (start instanceof Observable)
       obs.observe(start, s => obs.refresh())
