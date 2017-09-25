@@ -33,23 +33,50 @@ export interface ObserverOptions {
 }
 
 
+export interface FnOptions {
+  ms: number
+  leading?: boolean
+}
+
+
 /**
  *
  */
-export function debounce<A, B, C, D, E, Z, Fn = (a: A, b: B, c: C, d: D, e: E) => Z>(fn: Fn, ms: number): Fn
-export function debounce<A, B, C, D, Z, Fn = (a: A, b: B, c: C, d: D) => Z>(fn: Fn, ms: number): Fn
-export function debounce<A, B, C, Z, Fn = (a: A, b: B, c: C) => Z>(fn: Fn, ms: number): Fn
-export function debounce<A, B, Z, Fn = (a: A, b: B) => Z>(fn: Fn, ms: number): Fn
-export function debounce<A, Z>(fn: (a: A) => Z, ms: number): Z
-export function debounce(fn: any, ms: number): any {
+export function debounce<A, B, C, D, E, Z, Fn = (a: A, b: B, c: C, d: D, e: E) => Z>(fn: Fn, opts: FnOptions): Fn
+export function debounce<A, B, C, D, Z, Fn = (a: A, b: B, c: C, d: D) => Z>(fn: Fn, opts: FnOptions): Fn
+export function debounce<A, B, C, Z, Fn = (a: A, b: B, c: C) => Z>(fn: Fn, opts: FnOptions): Fn
+export function debounce<A, B, Z, Fn = (a: A, b: B) => Z>(fn: Fn, opts: FnOptions): Fn
+export function debounce<A, Z, Fn = (a: A) => Z>(fn: Fn, opts: FnOptions): Fn
+export function debounce(opts: FnOptions): (target: any, key: string, desc: PropertyDescriptor) => void
+export function debounce(fn: any, opts: FnOptions = {ms: 1, leading: false}): any {
   var timer: number
   var prev_res: any
+  var lead = false
+
+  // Called as a method decorator.
+  if (arguments.length === 1) {
+    opts = fn
+    return function (target: any, key: string, desc: PropertyDescriptor) {
+      var original = desc.value
+      desc.value = debounce(original, opts!)
+    }
+  }
 
   return function (this: any, ...args: any[]) {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
+    if (opts.leading && !lead && !timer) {
       prev_res = fn.apply(this, args)
-    }, ms)
+      lead = true
+    }
+
+    if (timer) {
+      lead = false
+      clearTimeout(timer)
+    }
+
+    timer = setTimeout(() => {
+      if (!lead) { prev_res = fn.apply(this, args) }
+      lead = false
+    }, opts!.ms)
     return prev_res
   }
 }
@@ -66,7 +93,6 @@ export class Observer<A, B = void> {
 
   call(new_value: A): B {
     const old = this.old_value
-    if (new_value instanceof Observable) throw new Error('WTF')
 
     if (typeof new_value !== 'undefined' && old !== new_value) {
       this.old_value = new_value
@@ -285,6 +311,13 @@ export class Observable<T> {
     }
   }
 
+  /**
+   * Create an observer bound to this observable, but do not start it.
+   * For it to start observing, one needs to call its `startObserving()` method.
+   *
+   * @param fn The function to be called by the observer when the value changes
+   * @param options
+   */
   createObserver<U = void>(fn: ObserverFunction<T, U>, options: ObserverOptions = {}): Observer<T, U> {
     if (options.debounce)
       return new DebounceObserver(fn, this, options.debounce, !!options.leading)
@@ -294,10 +327,17 @@ export class Observable<T> {
   }
 
   /**
-   * Add an observer.
+   * Add an observer to this observable. If there were no observers and this Observable
+   * observes another Observable, then its own observers to this observable are started.
+   *
+   * This method is called by `Observer#startObserving()` and is not meant to be called
+   * directly.
+   *
+   * @returns The newly created observer if a function was given to this method or
+   *   the observable that was passed.
    */
-  addObserver<U = void>(obs: Observer<T, U>): Observer<T, U>
   addObserver<U = void>(fn: ObserverFunction<T, U>, options?: ObserverOptions): Observer<T, U>
+  addObserver<U = void>(obs: Observer<T, U>): Observer<T, U>
   addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>, options?: ObserverOptions): Observer<T, U> {
 
     const ob = typeof _ob === 'function' ? this.createObserver(_ob, options) : _ob
@@ -316,8 +356,9 @@ export class Observable<T> {
   }
 
   /**
-   *
-   * @param ob
+   * Remove an observer from this observable. This means the Observer will not
+   * be called anymore when this Observable changes.
+   * @param ob The observer
    */
   removeObserver(ob: Observer<T, any>): void {
     var _new_obs: Observer<T, any>[] = []
@@ -363,36 +404,24 @@ export class Observable<T> {
    * true when this.get() > value
    * @tag transform-readonly
    */
-  gt(value: MaybeObservable<T>): Observable<boolean> {
+  isGreaterThan(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
-  }
-
-  greaterThan(value: MaybeObservable<T>): Observable<boolean> {
-    return this.gt(value)
   }
 
   /**
    * true when this.get() < value
    * @tag transform-readonly
    */
-  lt(value: MaybeObservable<T>): Observable<boolean> {
+  isLesserThan(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
-  }
-
-  lesserThan(value: MaybeObservable<T>): Observable<boolean> {
-    return this.lt(value)
   }
 
   /**
    * true when this.get() === value
    * @tag transform-readonly
    */
-  eq(value: MaybeObservable<T>): Observable<boolean> {
+  equals(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
-  }
-
-  equal(value: MaybeObservable<T>): Observable<boolean> {
-    return this.eq(value)
   }
 
 
@@ -400,36 +429,24 @@ export class Observable<T> {
    * true when this.get() !== value
    * @tag transform-readonly
    */
-  ne(value: MaybeObservable<T>): Observable<boolean> {
+  differs(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
-  }
-
-  notEqual(value: MaybeObservable<T>): Observable<boolean> {
-    return this.ne(value)
   }
 
   /**
    * true when this.get() >= value
    * @tag transform-readonly
    */
-  gte(value: MaybeObservable<T>): Observable<boolean> {
+  isGreaterOrEqual(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
-  }
-
-  greaterOrEqual(value: MaybeObservable<T>): Observable<boolean> {
-    return this.gte(value)
   }
 
   /**
    * true when this.get() <= value
    * @tag transform-readonly
    */
-  lte(value: MaybeObservable<T>): Observable<boolean> {
+  isLesserOrEqual(value: MaybeObservable<T>): Observable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
-  }
-
-  lesserOrEqual(value: MaybeObservable<T>): Observable<boolean> {
-    return this.lte(value)
   }
 
   /**
@@ -789,8 +806,10 @@ export class VirtualObservable<T> extends Observable<T> {
 
 
 /**
- *
- * @param arg
+ * Make sure we have an observable.
+ * @param arg A MaybeObservable
+ * @returns The original observable if `arg` already was one, or a new
+ *   Observable holding the value of `arg` if it wasn't.
  */
 export function o<T>(arg: MaybeObservable<T>): Observable<T>
 export function o<T>(arg: MaybeObservable<T> | undefined): Observable<T | undefined>
@@ -804,29 +823,55 @@ export type MaybeObservableObject<T> = { [P in keyof T]:  MaybeObservable<T[P]>}
 
 export namespace o {
 
+  /**
+   * Get a MaybeObservable's value
+   * @param arg The MaybeObservable
+   * @returns `arg.get()` if it was an Observable or `arg` itself if it was not.
+   */
   export function get<A>(arg: MaybeObservable<A>): A
   export function get<A>(arg?: undefined | MaybeObservable<A>): A | undefined
   export function get<A>(arg: MaybeObservable<A>): A {
     return arg instanceof Observable ? arg.get() : arg
   }
 
-  export function and(...args: Observable<any>[]): Observable<boolean> {
+
+  /**
+   * Combine several MaybeObservables into an Observable<boolean>
+   * @param args Several MaybeObservables that will be and'ed
+   * @returns A boolean Observable that is true when all of them are true, false
+   *   otherwise.
+   */
+  export function and(...args: MaybeObservable<any>[]): Observable<boolean> {
     if (args.length === 1)
-      return args[0].isTruthy()
+      return o(args[0]).isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
       lhs.and(rhs)
-    , args[0])
+    , o(args[0]))
   }
 
-  export function or(...args: Observable<any>[]): Observable<boolean> {
+
+  /**
+   * Combine several MaybeObservables into an Observable<boolean>
+   * @param args Several MaybeObservables that will be and'ed
+   * @returns A boolean Observable that is true when any of them is true, false
+   *   otherwise.
+   */
+  export function or(...args: MaybeObservable<any>[]): Observable<boolean> {
     if (args.length === 1)
-      return args[0].isTruthy()
+      return o(args[0]).isTruthy()
     return args.slice(1).reduce((lhs, rhs) =>
       lhs.or(rhs)
-    , args[0])
+    , o(args[0]))
   }
 
 
+  /**
+   * Merges several MaybeObservables into a single Observable.
+   *
+   * @param obj An object which values are MaybeObservable
+   * @returns An observable which properties are the ones given in `obj` and values
+   *   are the resolved values of their respective observables.
+   */
   export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A>
   export function merge<A extends object>(obj: MaybeObservableObject<A> | MaybeObservableObject<A>): Observable<A> | Observable<A> {
     const ro_obj = obj as MaybeObservableObject<A>
@@ -854,14 +899,12 @@ export namespace o {
 
     var res = new VirtualObservable(_get, _set)
 
-    res.pause()
     for (var name in ro_obj) {
       var ob = ro_obj[name]
       if (ob instanceof Observable) {
         res.observe(ob, () => res.refresh())
       }
     }
-    res.resume()
 
     return res
 
