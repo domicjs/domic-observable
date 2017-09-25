@@ -219,8 +219,10 @@ export class Observable<T> {
     for (var observer of this.__observers) {
       observer.startObserving()
     }
-    for (observer of this.__observed) {
-      observer.startObserving()
+    if (this.__observers.length > 0) {
+      for (observer of this.__observed) {
+        observer.startObserving()
+      }
     }
   }
 
