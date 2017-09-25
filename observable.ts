@@ -774,6 +774,13 @@ export class VirtualObservable<T> extends Observable<T> {
     this.fnset!(value, old_value)
   }
 
+  addObserver(ob: any, opts?: any) {
+    if (this.__observers.length === 0)
+      // If we were not observed before, there is a good chance this Observable
+      // does not hold the correct value, so we force a refresh here.
+      this.refresh()
+    return super.addObserver(ob, opts)
+  }
 }
 
 
