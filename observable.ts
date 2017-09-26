@@ -3,7 +3,7 @@ import * as clone from 'clone'
 
 export type UnregisterFunction = () => void
 
-export type ObserverFunction<T, U = void> = (newval: T, oldval: (T | undefined)) => U
+export type ObserverFunction<T, U = void> = (newval: T, oldval?: T) => U
 
 export type MaybeObservable<T> = T | Observable<T>
 
@@ -236,20 +236,27 @@ export class Observable<T> {
     for (var observer of this.__observers) {
       observer.stopObserving()
     }
-    for (observer of this.__observed) {
+    this.stopObserved()
+  }
+
+  stopObserved() {
+    for (var observer of this.__observed)
       observer.stopObserving()
-    }
+  }
+
+  startObserved() {
+    if (this.__observers.length === 0)
+      return
+
+    for (var observer of this.__observed)
+      observer.startObserving()
   }
 
   startObservers() {
     for (var observer of this.__observers) {
       observer.startObserving()
     }
-    if (this.__observers.length > 0) {
-      for (observer of this.__observed) {
-        observer.startObserving()
-      }
-    }
+    this.startObserved()
   }
 
   /**
@@ -286,14 +293,17 @@ export class Observable<T> {
   }
 
   pause() {
-    this.stopObservers()
     if (this.__paused_notify === -1)
       this.__paused_notify = 0
+    this.stopObserved()
   }
 
   resume() {
+    var prev_notify = this.__paused_notify
     this.__paused_notify = -1
-    this.startObservers()
+    this.startObserved()
+    if (prev_notify > 0)
+      this.notify()
   }
 
   /**
@@ -346,10 +356,7 @@ export class Observable<T> {
 
     // Subscribe to the observables we are meant to subscribe to.
     if (this.__observers.length === 1) {
-      const _obs = this.__observed
-      for (var i = 0; i < _obs.length; i++) {
-        _obs[i].startObserving()
-      }
+      this.startObserved()
     }
 
     return ob
@@ -518,16 +525,16 @@ export class Observable<T> {
    * any of the provided observables is true.
    * @tag transform-readonly
    */
-  or(...args : MaybeObservable<any>[]) : Observable<boolean> {
-    return args.reduce((acc, arg) => arg.or(acc), this)
+  or(value: MaybeObservable<any>) : VirtualObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(({lhs, rhs}) => !!lhs || rhs)
   }
 
   /**
    * True when this and all the values provided in args are true.
    * @tag transform-readonly
    */
-  and(...args: MaybeObservable<any>[]) : Observable<boolean> {
-    return args.reduce((acc, arg) => arg.and(acc), this)
+  and(value: MaybeObservable<any>) : VirtualObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(({lhs, rhs}) => lhs && rhs)
   }
 
   /**
