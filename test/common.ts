@@ -64,10 +64,11 @@ var unregs: Observer<any>[] = []
 
 export function spyon<T>(obs: Observable<T>, options?: ObserverOptions) {
   var spy = new Calls()
-  unregs.push(obs.addObserver(function (value, old) {
+  var observer = obs.createObserver(function (value, old) {
     if (typeof old === 'undefined') return // we're not interested in the first call
     spy.call(value, old)
-  }, options))
+  }, options)
+  observer.startObserving()
   return spy
 }
 

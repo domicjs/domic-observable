@@ -1,4 +1,8 @@
 
+declare global {
+  function require(a: any): any
+}
+
 require('source-map-support').install()
 
 ///////////////////////////////////////////////////////////
@@ -128,8 +132,10 @@ describe('basic operations', () => {
 
   it('pause and unpause observer', () => {
     const o_a = o(1)
+
     const spy = new Calls()
-    const obs = o_a.addObserver((v, old) => typeof old !== 'undefined' && spy.call(v))
+    const obs = o_a.createObserver((v, old) => typeof old !== 'undefined' && spy.call(v))
+    obs.startObserving()
 
     o_a.set(2)
     spy.was.called.once.with(2)
