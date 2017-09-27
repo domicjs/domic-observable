@@ -13,54 +13,6 @@ export type RecursivePartial<T> = {
 
 export type ObservableProxy<T> = Observable<T> & {[P in keyof T]: ObservableProxy<T[P]>}
 
-export interface FnOptions {
-  ms: number
-  leading?: boolean
-}
-
-
-/**
- *
- */
-export function debounce<A, B, C, D, E, Z, Fn = (a: A, b: B, c: C, d: D, e: E) => Z>(fn: Fn, opts: FnOptions): Fn
-export function debounce<A, B, C, D, Z, Fn = (a: A, b: B, c: C, d: D) => Z>(fn: Fn, opts: FnOptions): Fn
-export function debounce<A, B, C, Z, Fn = (a: A, b: B, c: C) => Z>(fn: Fn, opts: FnOptions): Fn
-export function debounce<A, B, Z, Fn = (a: A, b: B) => Z>(fn: Fn, opts: FnOptions): Fn
-export function debounce<A, Z, Fn = (a: A) => Z>(fn: Fn, opts: FnOptions): Fn
-export function debounce(opts: FnOptions): (target: any, key: string, desc: PropertyDescriptor) => void
-export function debounce(fn: any, opts: FnOptions = {ms: 1, leading: false}): any {
-  var timer: number
-  var prev_res: any
-  var lead = false
-
-  // Called as a method decorator.
-  if (arguments.length === 1) {
-    opts = fn
-    return function (target: any, key: string, desc: PropertyDescriptor) {
-      var original = desc.value
-      desc.value = debounce(original, opts!)
-    }
-  }
-
-  return function (this: any, ...args: any[]) {
-    if (opts.leading && !lead && !timer) {
-      prev_res = fn.apply(this, args)
-      lead = true
-    }
-
-    if (timer) {
-      lead = false
-      clearTimeout(timer)
-    }
-
-    timer = setTimeout(() => {
-      if (!lead) { prev_res = fn.apply(this, args) }
-      lead = false
-    }, opts!.ms)
-    return prev_res
-  }
-}
-
 
 export class Observer<A, B = void> {
 
@@ -82,6 +34,16 @@ export class Observer<A, B = void> {
     }
 
     return this.last_result
+  }
+
+  debounce(ms: number, leading = false) {
+    this.call = o.debounce(this.constructor.prototype.call, ms, leading)
+    return this
+  }
+
+  throttle(ms: number, leading = false) {
+    this.call = o.throttle(this.constructor.prototype.call, ms, leading)
+    return this
   }
 
   startObserving() {
@@ -829,6 +791,99 @@ export namespace o {
     var l = arr.length
     for (var i = 0; i < l; i++)
       fn(arr[i], i, arr)
+  }
+
+  /**
+   *
+   */
+  export function debounce(ms: number, leading?: boolean): (target: any, key: string, desc: PropertyDescriptor) => void
+  export function debounce<F extends Function>(fn: F, ms: number, leading?: boolean): F
+  export function debounce(fn: any, ms: any, leading: boolean = false): any {
+    var timer: number
+    var prev_res: any
+    var lead = false
+
+    // Called as a method decorator.
+    if (arguments.length === 1) {
+      leading = ms
+      ms = fn
+      return function (target: any, key: string, desc: PropertyDescriptor) {
+        var original = desc.value
+        desc.value = debounce(original, ms)
+      }
+    }
+
+    return function (this: any, ...args: any[]) {
+      if (leading && !lead && !timer) {
+        prev_res = fn.apply(this, args)
+        lead = true
+      }
+
+      if (timer) {
+        lead = false
+        clearTimeout(timer)
+      }
+
+      timer = setTimeout(() => {
+        if (!lead) { prev_res = fn.apply(this, args) }
+        lead = false
+      }, ms)
+      return prev_res
+    }
+  }
+
+
+  /**
+   *
+   */
+  export function throttle(ms: number, leading?: boolean): (target: any, key: string, desc: PropertyDescriptor) => void
+  export function throttle<F extends Function>(fn: F, ms: number, leading?: boolean): F
+  export function throttle(fn: any, ms: any, leading: boolean = false): any {
+    var timer: number | null
+    var prev_res: any
+    var lead = false
+    var last_call: number
+    var _args: any
+    var self: any
+
+    // Called as a method decorator.
+    if (typeof fn === 'number') {
+      leading = ms
+      ms = fn
+      return function (target: any, key: string, desc: PropertyDescriptor) {
+        var original = desc.value
+        desc.value = throttle(original, ms, leading)
+      }
+    }
+
+    return function (this: any, ...args: any[]) {
+      var now = Date.now().valueOf()
+
+      // console.log(leading, lead, timer, last_call, now)
+      if (leading && !lead && !timer && (!last_call || now - last_call >= ms)) {
+        prev_res = fn.apply(this, args)
+        lead = true
+      } else {
+        lead = false
+      }
+
+      self = this
+      _args = args
+      if (!timer) {
+        timer = setTimeout(function () {
+          if (!lead) {
+            prev_res = fn.apply(self, _args)
+            last_call = Date.now().valueOf()
+          }
+          lead = false
+          _args = null
+          timer = null
+        }, ms - last_call ? (now - last_call) : 0)
+      }
+
+      last_call = now
+      return prev_res
+    }
   }
 
 }

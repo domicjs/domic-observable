@@ -1,4 +1,4 @@
-import {Observable, Observer, ObserverOptions} from '../observable'
+import {Observable, Observer} from '../observable'
 
 export function cmp(a: any, b: any) {
   if (a === b) return true
@@ -62,12 +62,12 @@ export class Calls {
 
 var unregs: Observer<any>[] = []
 
-export function spyon<T>(obs: Observable<T>, options?: ObserverOptions) {
+export function spyon<T>(obs: Observable<T>) {
   var spy = new Calls()
   var observer = obs.createObserver(function (value, old) {
     if (typeof old === 'undefined') return // we're not interested in the first call
     spy.call(value, old)
-  }, options)
+  })
   observer.startObserving()
   return spy
 }

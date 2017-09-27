@@ -179,36 +179,41 @@ describe('basic operations', () => {
 
   it('debounce', async function () {
     const o_simple = o(0)
-    const s = spyon(o_simple, {debounce: 5})
+    const s = new Calls()
+    o_simple.addObserver((n, o) => s.call(n, o)).debounce(10)
 
-    await wait(11)
+    // await wait(11)
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
-    await wait(6)
-    s.was.called.once.with(3, 0)
+    await wait(11)
+    s.was.called.once.with(3, undefined)
     o_simple.set(2)
     o_simple.set(1)
     o_simple.set(-1)
-    await wait(6)
+    await wait(10)
     s.was.called.once.with(-1, 3)
   })
 
   it('throttle', async function () {
     const o_simple = o(0)
-    const s = spyon(o_simple, {throttle: 10})
+    const s = new Calls()
+    o_simple.addObserver((n, o) => {
+      s.call(n, o)
+    }).throttle(10, true)
 
-    await wait(11)
     o_simple.set(1)
     o_simple.set(2)
     o_simple.set(3)
-    s.was.called.once.with(1, 0)
+    s.was.called.once.with(1, undefined)
     await wait(15)
     s.was.called.once.with(3, 1)
     o_simple.set(2)
     o_simple.set(1)
     await wait(10)
-    s.was.called.once.with(1, 3)
+    s.was.called.once.with(2, 3)
+    await wait(10)
+    s.was.called.once.with(1, 2)
   })
 
   it('assign', () => {
