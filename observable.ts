@@ -13,26 +13,6 @@ export type RecursivePartial<T> = {
 
 export type ObservableProxy<T> = Observable<T> & {[P in keyof T]: ObservableProxy<T[P]>}
 
-/**
- * Options that determine how we are to listen to different types of updates.
- */
-export interface ObserverOptions {
-
-  /**
-   * Call the observer after this many milliseconds after the last update.
-   */
-  debounce?: number
-
-  /**
-   * Call the observer at most every this milliseconds.
-   */
-  throttle?: number
-
-  leading?: boolean
-
-}
-
-
 export interface FnOptions {
   ms: number
   leading?: boolean
@@ -117,111 +97,6 @@ export class Observer<A, B = void> {
 }
 
 
-export class ThrottleObserver<A, B> extends Observer<A, B> {
-
-  last_call: number
-  protected last_value: A | undefined
-  timeout: number | null
-
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public throttle: number, public leading: boolean) {
-    super(fn, observable)
-  }
-
-  call(new_value: A): B {
-    const now = Date.now()
-
-    var result = this.last_result
-    this.last_value = new_value
-
-    if (!this.last_call || now - this.last_call >= this.throttle) {
-      result = super.call(new_value)
-      this.last_result = result
-    } else {
-      if (!this.timeout) {
-        this.timeout = setTimeout(() => {
-          super.call(this.last_value!)
-          this.last_call = Date.now()
-          this.timeout = null
-        }, this.throttle - (now - this.last_call))
-      }
-    }
-    this.last_call = now
-
-    return result
-  }
-
-}
-
-
-export class DebounceObserver<A, B> extends Observer<A, B> {
-
-  saved_result: B
-  protected last_value: A | undefined
-  timeout: number | null = null
-
-  constructor(fn: ObserverFunction<A, B>, observable: Observable<A>, public debounce: number, public leading: boolean) {
-    super(fn, observable)
-  }
-
-  call(new_value: A): B {
-    this.last_value = new_value
-    if (this.timeout != null) {
-      clearTimeout(this.timeout)
-    }
-
-    this.timeout = setTimeout(() => {
-      this.saved_result = super.call(this.last_value!)
-    })
-
-    return this.saved_result
-  }
-
-}
-
-
-export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
-  if (typeof assignement !== 'object' || assignement.constructor !== Object)
-    return assignement as any
-
-  if (typeof assignement === 'object') {
-    var cloned = clone(value, true, 1) // shallow clone
-
-    for (var name in assignement) {
-      cloned[name] = assign(cloned[name], assignement[name]!)
-    }
-
-    return cloned
-  } else {
-    return value
-  }
-}
-
-
-export function map<T, U>(arr: T[], fn: (item: T, index: number, arr: T[]) => U) {
-  var res: U[] = []
-  var len = arr.length
-  for (var i = 0; i < len; i++)
-    res.push(fn(arr[i], i, arr))
-  return res
-}
-
-export function filter<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => boolean): T[] {
-  var res: T[] = []
-  var len = arr.length
-  for (var i = 0; i < len; i++) {
-    var item = arr[i]
-    if (fn(item, i, arr))
-      res.push(item)
-  }
-  return res
-}
-
-export function foreach<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => void): void {
-  var l = arr.length
-  for (var i = 0; i < l; i++)
-    fn(arr[i], i, arr)
-}
-
 export class Observable<T> {
   protected __observers: Observer<T, any>[] = []
   protected __observed: Observer<any, any>[] = []
@@ -289,7 +164,7 @@ export class Observable<T> {
   }
 
   assign(partial: RecursivePartial<T>): void {
-    this.set(assign(this.get(), partial))
+    this.set(o.assign(this.get(), partial))
   }
 
   pause() {
@@ -328,11 +203,7 @@ export class Observable<T> {
    * @param fn The function to be called by the observer when the value changes
    * @param options
    */
-  createObserver<U = void>(fn: ObserverFunction<T, U>, options: ObserverOptions = {}): Observer<T, U> {
-    if (options.debounce)
-      return new DebounceObserver(fn, this, options.debounce, !!options.leading)
-    if (options.throttle)
-      return new ThrottleObserver(fn, this, options.throttle, !!options.leading)
+  createObserver<U = void>(fn: ObserverFunction<T, U>): Observer<T, U> {
     return new Observer(fn, this)
   }
 
@@ -346,11 +217,11 @@ export class Observable<T> {
    * @returns The newly created observer if a function was given to this method or
    *   the observable that was passed.
    */
-  addObserver<U = void>(fn: ObserverFunction<T, U>, options?: ObserverOptions): Observer<T, U>
+  addObserver<U = void>(fn: ObserverFunction<T, U>): Observer<T, U>
   addObserver<U = void>(obs: Observer<T, U>): Observer<T, U>
-  addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>, options?: ObserverOptions): Observer<T, U> {
+  addObserver<U = void>(_ob: ObserverFunction<T, U> | Observer<T, U>): Observer<T, U> {
 
-    const ob = typeof _ob === 'function' ? this.createObserver(_ob, options) : _ob
+    const ob = typeof _ob === 'function' ? this.createObserver(_ob) : _ob
 
     this.__observers.push(ob)
 
@@ -391,9 +262,9 @@ export class Observable<T> {
    * is being observed.
    */
   observe<U, V = void>(observable: Observable<U>, observer: Observer<U, V>): Observer<U, V>
-  observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>, options?: ObserverOptions): Observer<U, V>
-  observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>, options?: ObserverOptions) {
-    const obs = typeof _observer === 'function' ? observable.createObserver(_observer, options) : _observer
+  observe<U, V = void>(observable: Observable<U>, observer: ObserverFunction<U, V>): Observer<U, V>
+  observe<U, V = void>(observable: Observable<U>, _observer: ObserverFunction<U, V> | Observer<U, V>) {
+    const obs = typeof _observer === 'function' ? observable.createObserver(_observer) : _observer
     this.__observed.push(obs)
 
     if (this.__observers.length > 0) {
@@ -623,7 +494,7 @@ export class Observable<T> {
 
     return this.tf(arr => {
       indexes = fn(arr)
-      return map(indexes, id => arr[id])
+      return o.map(indexes, id => arr[id])
     },
     transformed_array => {
       var arr = this.getShallowClone()
@@ -800,12 +671,12 @@ export class VirtualObservable<T> extends Observable<T> {
     this.fnset!(value, old_value)
   }
 
-  addObserver(ob: any, opts?: any) {
+  addObserver(ob: any) {
     if (this.__observers.length === 0)
       // If we were not observed before, there is a good chance this Observable
       // does not hold the correct value, so we force a refresh here.
       this.refresh()
-    return super.addObserver(ob, opts)
+    return super.addObserver(ob)
   }
 }
 
@@ -915,6 +786,49 @@ export namespace o {
 
     return res
 
+  }
+
+  export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
+    if (typeof assignement !== 'object' || assignement.constructor !== Object)
+      return assignement as any
+
+    if (typeof assignement === 'object') {
+      var cloned = clone(value, true, 1) // shallow clone
+
+      for (var name in assignement) {
+        cloned[name] = assign(cloned[name], assignement[name]!)
+      }
+
+      return cloned
+    } else {
+      return value
+    }
+  }
+
+
+  export function map<T, U>(arr: T[], fn: (item: T, index: number, arr: T[]) => U) {
+    var res: U[] = []
+    var len = arr.length
+    for (var i = 0; i < len; i++)
+      res.push(fn(arr[i], i, arr))
+    return res
+  }
+
+  export function filter<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => boolean): T[] {
+    var res: T[] = []
+    var len = arr.length
+    for (var i = 0; i < len; i++) {
+      var item = arr[i]
+      if (fn(item, i, arr))
+        res.push(item)
+    }
+    return res
+  }
+
+  export function foreach<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => void): void {
+    var l = arr.length
+    for (var i = 0; i < l; i++)
+      fn(arr[i], i, arr)
   }
 
 }
