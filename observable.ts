@@ -244,7 +244,7 @@ export class Observable<T> {
    * true when this.get() > value
    * @tag transform-readonly
    */
-  isGreaterThan(value: MaybeObservable<T>): Observable<boolean> {
+  isGreaterThan(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs > v.rhs)
   }
 
@@ -252,7 +252,7 @@ export class Observable<T> {
    * true when this.get() < value
    * @tag transform-readonly
    */
-  isLesserThan(value: MaybeObservable<T>): Observable<boolean> {
+  isLesserThan(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs < v.rhs)
   }
 
@@ -260,7 +260,7 @@ export class Observable<T> {
    * true when this.get() === value
    * @tag transform-readonly
    */
-  equals(value: MaybeObservable<T>): Observable<boolean> {
+  equals(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs === v.rhs)
   }
 
@@ -269,7 +269,7 @@ export class Observable<T> {
    * true when this.get() !== value
    * @tag transform-readonly
    */
-  differs(value: MaybeObservable<T>): Observable<boolean> {
+  differs(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value},).tf(v => v.lhs !== v.rhs)
   }
 
@@ -277,7 +277,7 @@ export class Observable<T> {
    * true when this.get() >= value
    * @tag transform-readonly
    */
-  isGreaterOrEqual(value: MaybeObservable<T>): Observable<boolean> {
+  isGreaterOrEqual(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs >= v.rhs)
   }
 
@@ -285,7 +285,7 @@ export class Observable<T> {
    * true when this.get() <= value
    * @tag transform-readonly
    */
-  isLesserOrEqual(value: MaybeObservable<T>): Observable<boolean> {
+  isLesserOrEqual(value: MaybeObservable<T>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(v => v.lhs <= v.rhs)
   }
 
@@ -293,7 +293,7 @@ export class Observable<T> {
    * true when this.get() is null or undefined
    * @tag transform-readonly
    */
-  isNull(): Observable<boolean> {
+  isNull() {
     return this.tf(val => val == null)
   }
 
@@ -301,7 +301,7 @@ export class Observable<T> {
    * true when this.get() is neither null nor undefined
    * @tag transform-readonly
    */
-  isNotNull(): Observable<boolean> {
+  isNotNull() {
     return this.tf(val => val != null)
   }
 
@@ -309,7 +309,7 @@ export class Observable<T> {
    * true when this.get() is strictly undefined
    * @tag transform-readonly
    */
-  isUndefined(): Observable<boolean> {
+  isUndefined() {
     return this.tf(val => val === undefined)
   }
 
@@ -317,7 +317,7 @@ export class Observable<T> {
    * true when this.get() is strictly not undefined
    * @tag transform-readonly
    */
-  isDefined(): Observable<boolean> {
+  isDefined() {
     return this.tf(val => val !== undefined)
   }
 
@@ -325,7 +325,7 @@ export class Observable<T> {
    * true when this.get() is === false
    * @tag transform-readonly
    */
-  isFalse(this: Observable<boolean>): Observable<boolean> {
+  isFalse(this: Observable<boolean>) {
     return this.tf(val => val as any === false)
   }
 
@@ -333,7 +333,7 @@ export class Observable<T> {
    * true when this.get() === true
    * @tag transform-readonly
    */
-  isTrue(this: Observable<boolean>): Observable<boolean> {
+  isTrue(this: Observable<boolean>) {
     return this.tf(val => val as any === true)
   }
 
@@ -341,7 +341,7 @@ export class Observable<T> {
    * true when this.get() would be false in an if condition
    * @tag transform-readonly
    */
-  isFalsy(): Observable<boolean> {
+  isFalsy() {
     return this.tf(val => !val)
   }
 
@@ -349,7 +349,7 @@ export class Observable<T> {
    * true when this.get() would be true in an if condition
    * @tag transform-readonly
    */
-  isTruthy(): Observable<boolean> {
+  isTruthy() {
     return this.tf(val => !!val)
   }
 
@@ -358,43 +358,43 @@ export class Observable<T> {
    * any of the provided observables is true.
    * @tag transform-readonly
    */
-  or(value: MaybeObservable<any>) : VirtualObservable<boolean> {
-    return o.merge({lhs: this, rhs: value}).tf(({lhs, rhs}) => !!lhs || rhs)
+  or(value: MaybeObservable<any>): VirtualObservable<boolean> {
+    return o.merge({lhs: this, rhs: value}).tf(({lhs, rhs}) => !!lhs || !!rhs)
   }
 
   /**
    * True when this and all the values provided in args are true.
    * @tag transform-readonly
    */
-  and(value: MaybeObservable<any>) : VirtualObservable<boolean> {
+  and(value: MaybeObservable<any>): VirtualObservable<boolean> {
     return o.merge({lhs: this, rhs: value}).tf(({lhs, rhs}) => lhs && rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  plus(this: Observable<number>, pl: Observable<number>): Observable<number> {
+  plus(this: Observable<number>, pl: MaybeObservable<number>) {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs + rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  minus(this: Observable<number>, pl: Observable<number>): Observable<number> {
+  minus(this: Observable<number>, pl: MaybeObservable<number>) {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs - rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  times(this: Observable<number>, pl: Observable<number>): Observable<number> {
+  times(this: Observable<number>, pl: MaybeObservable<number>) {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs * rhs)
   }
 
   /**
    * @tag transform-readonly
    */
-  dividedBy(this: Observable<number>, pl: Observable<number>): Observable<number> {
+  dividedBy(this: Observable<number>, pl: MaybeObservable<number>) {
     return o.merge({lhs: this, rhs: pl}).tf(({lhs, rhs}) => lhs / rhs)
   }
 
