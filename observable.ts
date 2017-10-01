@@ -409,13 +409,9 @@ export class Observable<T> {
 
     const fn = new Observer(fnget, this)
 
-    var obs = new VirtualObservable<U>(() => {
+    return new VirtualObservable<U>(() => {
       return fn.call(this.get())
-    }, fnset)
-
-    obs.observe(this, () => obs.refresh())
-
-    return obs
+    }, fnset).dependsOn(this)
   }
 
   p<U extends object, K extends keyof U>(this: Observable<U>, key: K): VirtualObservable<U[K]>
@@ -423,21 +419,14 @@ export class Observable<T> {
   p<U>(this: Observable<U[]>, key: MaybeObservable<number>): VirtualObservable<U>
   p(this: Observable<any>, key: MaybeObservable<number|string>): VirtualObservable<any> {
 
-    var obs = new VirtualObservable(() => {
+    return new VirtualObservable(() => {
       return this.get()[o.get(key)]
     }, item => {
       const arr = this.getShallowClone()
       arr[o.get(key)] = item
       this.set(arr)
-    })
-
-    obs.observe(this, () => obs.refresh())
-    if (key instanceof Observable)
-      obs.observe(key, () => {
-        obs.refresh()
-      })
-
-    return obs
+    }).dependsOn(this)
+      .dependsOn(key)
   }
 
   /**
@@ -445,17 +434,18 @@ export class Observable<T> {
    * were returned by the callback.
    *
    * This is generally used to filter or resort an array freely while maintaining
-   * the possibility to set its individual properties.
+   * the possibility to set its individual items.
    *
-   * It also checks if the individual items changed
-   *
-   * @param fn The transform function
+   * @param fn The transform function that returns numeric indices of the elements
+   *   it wishes to keep of the list.
    */
-  arrayTransform<A>(this: Observable<A[]>, fn: (lst: A[]) => number[]): VirtualObservable<A[]> {
+  arrayTransform<A>(this: Observable<A[]>, fn: MaybeObservable<(lst: A[]) => number[]>): VirtualObservable<A[]> {
     var indexes: number[]
 
-    return this.tf(arr => {
-      indexes = fn(arr)
+    return new VirtualObservable(() => {
+      const arr = o.get(this)
+      const _fn = o.get(fn)
+      indexes = _fn(arr)
       return o.map(indexes, id => arr[id])
     },
     transformed_array => {
@@ -469,7 +459,8 @@ export class Observable<T> {
         arr[indexes[i]] = transformed_array[i]
       }
       this.set(arr)
-    })
+    }).dependsOn(this)
+      .dependsOn(fn)
   }
 
   /**
@@ -477,43 +468,43 @@ export class Observable<T> {
    * @param this
    * @param fn
    */
-  filtered<U>(this: Observable<U[]>, fn: (item: U, index: number, array: U[]) => boolean): VirtualObservable<U[]> {
-    return this.arrayTransform(arr => {
-      var res: number[] = []
-      var len = arr.length
-      for (var i = 0; i < len; i++)
-        if (fn(arr[i], i, arr))
-          res.push(i)
-      return res
-    })
+  filtered<U>(this: Observable<U[]>, fn: MaybeObservable<(item: U, index: number, array: U[]) => boolean>): VirtualObservable<U[]> {
+    function make_filter(fn: (item: U, index: number, array: U[]) => boolean): (lst: U[]) => number[] {
+      return function (arr: U[]) {
+        var res: number[] = []
+        var len = arr.length
+        for (var i = 0; i < len; i++)
+          if (fn(arr[i], i, arr))
+            res.push(i)
+        return res
+      }
+    }
+    return this.arrayTransform(fn instanceof Observable ? fn.tf(fn => make_filter(fn)): make_filter(fn))
   }
 
-  sorted<U> (this: Observable<U[]>, fn: (a: U, b: U) => (1 | 0 | -1)) {
-    return this.arrayTransform(arr => {
-      var indices = []
-      var l = arr.length
-      for (var i = 0; l < l; i++)
-        indices.push(i)
-      indices.sort((a, b) => fn(arr[a], arr[b]))
-      return indices
-    })
+  sorted<U> (this: Observable<U[]>, fn: MaybeObservable<(a: U, b: U) => (1 | 0 | -1)>): VirtualObservable<U[]> {
+    function make_sortfn(fn: (a: U, b: U) => (1 | 0 | -1)) {
+      return function (arr: U[]) {
+        var indices = []
+        var l = arr.length
+        for (var i = 0; l < l; i++)
+          indices.push(i)
+        indices.sort((a, b) => fn(arr[a], arr[b]))
+        return indices
+      }
+    }
+    return this.arrayTransform(fn instanceof Observable ? fn.tf(make_sortfn) : make_sortfn(fn))
   }
 
   sliced<A>(this: Observable<A[]>, start?: MaybeObservable<number>, end?: MaybeObservable<number>): VirtualObservable<A[]> {
-    var obs = this.arrayTransform(arr => {
+    return this.arrayTransform(arr => {
       var indices = []
       var l = o.get(end) || arr.length
       for (var i = o.get(start) || 0; i < l; i++)
         indices.push(i)
       return indices
-    })
-
-    if (start instanceof Observable)
-      obs.observe(start, s => obs.refresh())
-    if (end instanceof Observable)
-      obs.observe(end, e => obs.refresh())
-
-    return obs
+    }).dependsOn(start)
+      .dependsOn(end)
   }
 
   push<A>(this: Observable<A[]>, value: A) {
@@ -639,6 +630,13 @@ export class VirtualObservable<T> extends Observable<T> {
       // does not hold the correct value, so we force a refresh here.
       this.refresh()
     return super.addObserver(ob)
+  }
+
+  dependsOn(ob: MaybeObservable<any>) {
+    if (ob instanceof Observable) {
+      this.observe(ob, () => this.refresh())
+    }
+    return this
   }
 }
 
