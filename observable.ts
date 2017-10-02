@@ -707,8 +707,7 @@ export namespace o {
    * @returns An observable which properties are the ones given in `obj` and values
    *   are the resolved values of their respective observables.
    */
-  export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A>
-  export function merge<A extends object>(obj: MaybeObservableObject<A> | MaybeObservableObject<A>): Observable<A> | Observable<A> {
+  export function merge<A extends object>(obj: MaybeObservableObject<A>): Observable<A> {
     const ro_obj = obj as MaybeObservableObject<A>
 
     function _get(): A {
