@@ -442,10 +442,8 @@ export class Observable<T> {
   arrayTransform<A>(this: Observable<A[]>, fn: MaybeObservable<(lst: A[]) => number[]>): VirtualObservable<A[]> {
     var indexes: number[]
 
-    return new VirtualObservable(() => {
-      const arr = o.get(this)
-      const _fn = o.get(fn)
-      indexes = _fn(arr)
+    return o.merge({arr: this, fn}).tf(({arr, fn}) => {
+      indexes = fn(arr)
       return o.map(indexes, id => arr[id])
     },
     transformed_array => {
@@ -459,8 +457,7 @@ export class Observable<T> {
         arr[indexes[i]] = transformed_array[i]
       }
       this.set(arr)
-    }).dependsOn(this)
-      .dependsOn(fn)
+    })
   }
 
   /**
@@ -738,10 +735,7 @@ export namespace o {
     var res = new VirtualObservable(_get, _set)
 
     for (var name in ro_obj) {
-      var ob = ro_obj[name]
-      if (ob instanceof Observable) {
-        res.observe(ob, () => res.refresh())
-      }
+      res.dependsOn(ro_obj[name])
     }
 
     return res
