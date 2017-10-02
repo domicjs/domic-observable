@@ -621,6 +621,8 @@ export class VirtualObservable<T> extends Observable<T> {
     this.fnset!(value, old_value)
   }
 
+  addObserver<U = void>(fn: ObserverFunction<T, U>): Observer<T, U>
+  addObserver<U = void>(obs: Observer<T, U>): Observer<T, U>
   addObserver(ob: any) {
     if (this.__observers.length === 0)
       // If we were not observed before, there is a good chance this Observable
