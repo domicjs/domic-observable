@@ -14,7 +14,6 @@
     "dev": "parallel -u ::: 'tscc -w' 'ls *.js | entr mocha -R dot '"
   },
   "dependencies": {
-    "clone": "^2.1.1",
     "tslib": "*"
   },
   "devDependencies": {

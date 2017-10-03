@@ -1,6 +1,4 @@
 
-import * as clone from 'clone'
-
 export type UnregisterFunction = () => void
 
 export type ObserverFunction<T, U = void> = (newval: T, oldval?: T) => U
@@ -107,13 +105,10 @@ export class Observable<T> {
 
   /**
    * Get a shallow copy of the current value. Used for transforms.
+   * Prototypes and constructor should be kept in the cloned object.
    */
-  getShallowClone(circular = false): T {
-    return clone(this.get(), circular, 1)
-  }
-
-  getClone(circular = false): T {
-    return clone(this.get(), circular)
+  getShallowClone(): T {
+    return o.clone(this.get())
   }
 
   /**
@@ -743,15 +738,21 @@ export namespace o {
 
   }
 
-  export function assign<A>(value: A, assignement: RecursivePartial<A>): A {
-    if (typeof assignement !== 'object' || assignement.constructor !== Object)
-      return assignement as any
+  /**
+   * Create a new object based on an original object and a mutator
+   * @param value The value the new object will be based on
+   * @param mutator An object providing new values for select properties
+   * @returns a new instance of the object
+   */
+  export function assign<A>(value: A, mutator: RecursivePartial<A>): A {
+    if (typeof mutator !== 'object' || mutator.constructor !== Object)
+      return mutator as any
 
-    if (typeof assignement === 'object') {
-      var cloned = clone(value, true, 1) // shallow clone
+    if (typeof mutator === 'object') {
+      var cloned = clone(value) // shallow clone
 
-      for (var name in assignement) {
-        cloned[name] = assign(cloned[name], assignement[name]!)
+      for (var name in mutator) {
+        cloned[name] = assign(cloned[name], mutator[name]!)
       }
 
       return cloned
@@ -760,15 +761,26 @@ export namespace o {
     }
   }
 
-
+  /**
+   * Naïve implementation of Array.prototype.map, as it does a lot of unnecessary checks.
+   * @param arr The original array
+   * @param fn The function to apply on this array
+   * @returns A new array with the mapped value
+   */
   export function map<T, U>(arr: T[], fn: (item: T, index: number, arr: T[]) => U) {
-    var res: U[] = []
     var len = arr.length
+    var res: U[] = new Array<U>(len)
     for (var i = 0; i < len; i++)
-      res.push(fn(arr[i], i, arr))
+      res[i] = fn(arr[i], i, arr)
     return res
   }
 
+  /**
+   * Naïve implementation of Array.prorotype.filter that avoids unnecessary checks.
+   * @param arr The original array
+   * @param fn The filter function
+   * @returns A new array with the filtered object.
+   */
   export function filter<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => boolean): T[] {
     var res: T[] = []
     var len = arr.length
@@ -780,6 +792,11 @@ export namespace o {
     return res
   }
 
+  /**
+   * Naïve implementation of foreach that does no unnecessary checks.
+   * @param arr The array
+   * @param fn The function to apply
+   */
   export function foreach<T>(arr: T[], fn: (item: T, index: number, arr: T[]) => void): void {
     var l = arr.length
     for (var i = 0; i < l; i++)
@@ -877,6 +894,80 @@ export namespace o {
       last_call = now
       return prev_res
     }
+  }
+
+  /**
+   * Shallow clone an object. If you want to perform deep operations, use assign instead.
+   * Not all types are safely cloned.
+   *
+   *  - Maps, Arrays and Sets are cloned, but any subclass information is lost, as you'll get
+   *    a Map, Array or Set as a result.
+   *  - Custom objects are cloned and their constructors are respected.
+   *  - Promises are not supported.
+   *  - Regexp and Dates are supported.
+   *
+   * @param obj The object to shallow clone
+   * @returns a new instance of the passed object.
+   */
+  export function clone<T>(obj: T): T
+  export function clone(obj: any): any {
+    if (obj == null || typeof obj === 'number' || typeof obj === 'string' || typeof obj === 'boolean')
+      return obj
+    var clone: any
+    var len: number
+    var key: number | string
+
+    if (Array.isArray(obj)) {
+      len = obj.length
+      clone = new Array(len)
+      for (key = 0; key < len; key++)
+        clone[key] = obj[key]
+      return clone
+    }
+
+    if (obj instanceof Date) {
+      return new Date(obj.getTime()) // timezone ?
+    }
+
+    if (obj instanceof RegExp) {
+      return new RegExp(obj.source,
+        ''
+        + obj.global ? 'g' : ''
+        + obj.multiline ? 'm' : ''
+        + obj.unicode ? 'u' : ''
+        + obj.ignoreCase ? 'i' : ''
+        + obj.sticky ? 'y' : ''
+      )
+    }
+
+    if (obj instanceof Map) {
+      clone = new Map()
+      obj.forEach((key, value) => {
+        clone.set(key, value)
+      })
+      return clone
+    }
+
+    if (obj instanceof Set) {
+      clone = new Set()
+      obj.forEach(val => clone.add(val))
+      return clone
+    }
+
+    // If we got here, then we're cloning an object
+    var prototype = Object.getPrototypeOf(obj)
+    clone = Object.create(prototype)
+
+    for (key of Object.getOwnPropertyNames(obj)) {
+      // should we check for writability ? enumerability ?
+      clone[key] = obj[key]
+    }
+
+    for (var sym of Object.getOwnPropertySymbols(obj)) {
+      clone[sym] = obj[sym]
+    }
+
+    return clone
   }
 
 }
